@@ -32,7 +32,7 @@ function mkF(c, idx, team = idx ? 1 : 0){   // idx = index in G.f (unique), team
   const K = Characters.skillsOf(c.id);   // K.skills = [skill I, skill II], K.ultimate, K.passive (see characters/titan/skills.js)
   return {c, idx, K, A:K.basic,
     sk:K.skills.map(d => ({cd:Array(d.charges || 1).fill(0)})),   // skill cooldowns: one timer per charge (each charge recharges on its own)
-    uc:0, pn:0, pt:0, bar:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
+    uc:0, pn:0, pt:0, bar:0, mag:0, rl:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0, snipe:null, snCd:0, snLock:false, lob:null,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
     team, dead:false, tgt:null, cs:0, comboT:0, aqB:0, w:30, h:52, x:0, y:0, vx:0, vy:0, face: team ? -1 : 1, hp:c.hp, max:c.hp, stocks:3,
     jumps:2, gr:false, atk:0, atkCd:0, hitDone:true, stun:0, inv:0, drop:0, flash:0,
     jq:false, dq:false, aq:false, in:{l:0, r:0}, aiT:0};
@@ -142,7 +142,7 @@ function ko(f){
       }
     }
   }
-  f.hp = f.max; f.x = W/2; f.y = -40; f.vx = f.vy = 0; f.jumps = 2; f.inv = 1.6; f.stun = 0; f.atk = 0; f.gr = false; f.rush = null; f.bar = 0; f.pt = 0; f.pn = 0; f.hk = null; f.slaughter = null; f.capturedBy = null; f.mk = 0; f.bl = 0; f.stench = null; f.slowT = 0; f.vomit = null; f.heldT = 0; f.fe = 0; f.feKey = null; f.shd = null; f.shadows = []; f.onsl = null; f.fr = 0; f.hLast = 0; f.dv = 0; f.dvKey = null; f.vclaw = null; f.uhand = null; f.afterimg = null; f.slam = null; f.kdT = 0; f.slowVoidT = 0; f.holy = null; f.impacted = false; f.slowHolyT = 0; f.sc = null; f.aegis = null; f.arE = 0;
+  f.mag = 0; f.rl = 0; f.hp = f.max; f.x = W/2; f.y = -40; f.vx = f.vy = 0; f.jumps = 2; f.inv = 1.6; f.stun = 0; f.atk = 0; f.gr = false; f.rush = null; f.bar = 0; f.pt = 0; f.pn = 0; f.hk = null; f.slaughter = null; f.capturedBy = null; f.mk = 0; f.bl = 0; f.stench = null; f.slowT = 0; f.vomit = null; f.heldT = 0; f.fe = 0; f.feKey = null; f.shd = null; f.shadows = []; f.onsl = null; f.fr = 0; f.hLast = 0; f.dv = 0; f.dvKey = null; f.vclaw = null; f.uhand = null; f.afterimg = null; f.slam = null; f.kdT = 0; f.slowVoidT = 0; f.holy = null; f.impacted = false; f.slowHolyT = 0; f.sc = null; f.aegis = null; f.arE = 0; f.snipe = null; f.snCd = 0; f.snLock = false; f.lob = null;
   if(f.dead){ f.x = -5000; f.y = -5000; f.hp = 0; f.inv = 999; f.stun = 0; }   // eliminated: parked off-screen, skipped by everything
 }
 
@@ -281,6 +281,15 @@ const SKILLS = {
     S.copies.forEach(c => { c.px = c.ppx = f.x; c.py = c.ppy = f.y; });
   },
   // VOID CLAW (Umbra I): ground-targeted. He reaches out, the spot is marked, then a giant claw bursts up from the ground (clawStep).
+  // EXPLOSIVE SHOT (Caliber I): ARC aiming. The landing spot is chosen by the player (drag the button: how far = how far it lands, left / right = which side; a tap = the enemy's column, else ahead).
+  // After a short wind-up (d.windup s) a shell is lobbed along the arc shown by the preview. It has real travel time (enemies can walk out from under it), and explodes the instant it touches
+  // ground (a platform top) or an enemy: everyone enemy within d.radius px takes damage + a small push away from the blast. No fuse, no delay. See lobAim / lobStep / bombBlast.
+  lobshot(f, o, d, ax, ay, m){
+    const a = lobAim(f, o, d, ax, ay, m);
+    f.face = a.dir;
+    startSkillA(f, skillA(d, {time:d.cast || .4, root:true, noSlash:true, lobAng:Math.atan2(-a.vy, Math.abs(a.vx))}));
+    f.lob = {t:0, at:d.windup || .18, a, d};
+  },
   voidclaw(f, o, d, ax, ay, m){
     const g = groundAim(f, o, d, ax, ay, m); if(!g) return;
     f.face = Math.sign(g.x - f.x) || f.face;
@@ -650,6 +659,7 @@ const CAN = {
 };
 function castSkill(f, o, q){
   const d = slotDef(f, q.i); if(!d || !SKILLS[d.kind]) return;
+  if(f.snipe) return;                                         // aiming the sniper rifle: no skills until he lets go
   if(f.atk > 0 && f.A && f.A.skill === 'quake') return;      // the ultimate wind-up cannot be cancelled by another skill
   let slot = 0;
   if(q.i < 2){ slot = f.sk[q.i].cd.findIndex(c => c <= 0); if(slot < 0) return; } else if(f.uc > 0) return;
@@ -908,30 +918,62 @@ function painIsFuel(f){
 // art.js can draw it with shot(cx, s, t) (s = {x, y, r, vx, age, kind}). art.js front() may set f.handW = {N:{x,y}, F:{x,y}} (world coords) so the sphere leaves the real hand.
 //   Charged sphere: skills.js chargeShot:{p, hand, rMin, rMax, speed, life, dmg, dmgGrow, kbx, kby, stunx, shake, hitstop} + chargeP / chargeMin / chargeMax (same hold-ATK charge as punches).
 //   Released after holding: radius = rMin..rMax and damage = dmg x (1 + dmgGrow x charge level), the knockback numbers are used as written.
+// ---- passive BULLET CHAMBER (Caliber) ----
+// skills.js passive:{kind:'chamber', max, reload, critMult, critSnipe, critKb}. Every bullet that leaves a gun uses 1 of `max` bullets (a miss still counts).
+// The LAST bullet of the magazine (the 5th) is ALWAYS critical: damage x critMult, more knockback. (The Deadeye Sniper shot never uses the magazine, see sniperStep.) It does not matter if the first 4 hit or missed.
+// After the last bullet he reloads by himself for `reload` s: he can move, but he cannot start any attack. When it ends the magazine is full again (f.mag = bullets fired, f.rl = reload time left).
+function chamberFire(f, P, big){   // returns the damage/knockback changes if this bullet is the critical one, else null
+  f.mag++;
+  if(f.mag < P.max) return null;
+  f.rl = P.reload;                                   // last bullet: reload starts right now
+  return {mult:P.critMult, kb:P.critKb};
+}
+function chamberStep(f, dt){
+  if(f.rl <= 0) return;
+  f.rl -= dt;
+  if(f.rl <= 0){ f.rl = 0; f.mag = 0; G.rings.push({x:f.x, y:f.y - f.h / 2, life:.25}); G.pops.push({x:f.x, y:f.y - f.h - 16, txt:'RELOADED', life:.7}); }
+}
 function shoot(f, sh){
   sh = sh || f.A.shot;
+  const CH = f.K.passive && f.K.passive.kind === 'chamber' ? f.K.passive : null;
+  if(CH && f.rl > 0) return;                         // reloading: no bullet leaves the gun
   const d = f.face, hw = f.handW, big = !!f.A.chargeShot && sh === f.A.chargeShot;
   let r = sh.r, A = f.A;
   if(big){ const cl = f.A.cl || 0; r = sh.rMin + (sh.rMax - sh.rMin) * cl;
     A = {...f.A, dmg:sh.dmg * (1 + (sh.dmgGrow || 0) * cl), kbx:sh.kbx, kby:sh.kby, stunx:sh.stunx, shake:sh.shake, hitstop:sh.hitstop};
     if(sh.slow){ A.slowAmt = sh.slow; A.slowDur = (sh.slowMin || 1) + ((sh.slowMax || 3) - (sh.slowMin || 1)) * cl; }   // slow strength / time grow with the charge
     if(sh.explode) A.expl = r * sh.explode; }
+  const crit = CH ? chamberFire(f, CH, big) : null;   // Bullet Chamber: is this the 5th (critical) bullet?
+  if(crit) A = {...A, dmg:A.dmg * crit.mult, kbx:(A.kbx ?? 1) * crit.kb, shake:(A.shake || 1) + 2, hitstop:Math.max(A.hitstop || 0, .09), crit:true};
   A = {...A, hid:++HID};   // this sphere = one attack (Abyssal Hunger: one fragment, Divine Retribution: one charge)
   let x = f.x + d * 22, y = f.y - 32;
   if(hw){ const pts = sh.hand === 'B' ? [hw.N, hw.F] : [sh.hand === 'F' ? hw.F : hw.N]; x = pts.reduce((a, q) => a + q.x, 0) / pts.length; y = pts.reduce((a, q) => a + q.y, 0) / pts.length; }
-  (G.sh = G.sh || []).push({id:f.c.id, c:f.c, idx:f.idx, team:f.team, A, x, y, vx:d * sh.speed, r, life:sh.life || 1.6, age:0, kind:big ? 3 : (f.A.step || 0), cl:big ? (f.A.cl || 0) : 0});
+  (G.sh = G.sh || []).push({id:f.c.id, c:f.c, idx:f.idx, team:f.team, A, x, y, vx:d * sh.speed, r, life:sh.life || 1.6, age:0, kind:big ? 3 : (f.A.step || 0), cl:big ? (f.A.cl || 0) : 0, crit:!!crit});
+  if(crit){ G.rings.push({x, y, life:.2}); for(let i = 0; i < 8; i++) G.parts.push({x, y, vx:d * (120 + Math.random() * 300), vy:(Math.random() - .5) * 260, life:.3, col:i % 2 ? '#ff4a2e' : '#ffd27a'}); }   // red muzzle flash
 }
 function updateShots(dt){
   if(!G.sh) return;
   G.sh.forEach(s => {
-    s.age += dt; s.life -= dt; s.x += s.vx * dt; s.y += (s.vy || 0) * dt;
-    const hr = s.r + (s.A.expl || 0) * .5;                            // an exploding orb goes off a little before it touches
-    const o = G.f.find(q => q.team !== s.team && !q.dead && q.inv <= 0 && q.capturedBy == null && s.x + hr > q.x - q.w / 2 && s.x - hr < q.x + q.w / 2 && s.y + hr > q.y - q.h && s.y - hr < q.y);   // first enemy it touches
-    if(o){
+    s.age += dt; s.life -= dt;
+    const n = Math.max(1, Math.ceil(Math.hypot(s.vx, s.vy || 0) * dt / 14)), h = dt / n;   // fast bullets (the sniper shot) move in small steps so they cannot jump over a fighter
+    for(let k = 0; k < n; k++){
+      if(s.g) s.vy = (s.vy || 0) + s.g * h;                           // lobbed shell: gravity bends its path into the arc
+      const py = s.y; s.x += s.vx * h; s.y += (s.vy || 0) * h;
+      const hr = s.r + (s.A.expl || 0) * .5;                            // an exploding orb goes off a little before it touches
+      const o = G.f.find(q => q.team !== s.team && !q.dead && q.inv <= 0 && q.capturedBy == null && s.x + hr > q.x - q.w / 2 && s.x - hr < q.x + q.w / 2 && s.y + hr > q.y - q.h && s.y - hr < q.y);   // first enemy it touches
+      if(s.blast){                                                    // Explosive Shot: goes off the instant it touches an enemy or a platform top (no fuse)
+        if(o){ bombBlast(s); break; }
+        if(s.vy > 0){ const p = G.P.find(q => s.x > q.x && s.x < q.x + q.w && py <= q.y && s.y >= q.y); if(p){ s.y = p.y; bombBlast(s); break; } }
+        continue;
+      }
+      if(!o) continue;
       s.life = 0;
+      if(s.A.crit) G.pops.push({x:o.x, y:o.y - o.h - 24, txt:'CRITICAL!', life:.9});
+      if(s.A.snipe) G.pops.push({x:o.x, y:o.y - o.h - 24, txt:'DEADEYE!', life:.9});
       hurt(o, {c:s.c, A:s.A, face:Math.abs(s.vx) > 30 ? Math.sign(s.vx) : (Math.sign(o.x - s.x) || 1), src:G.f[s.idx]});
       if(s.A.slowDur){ o.slowAmt = o.slowT > 0 ? Math.max(o.slowAmt, s.A.slowAmt) : s.A.slowAmt; o.slowT = Math.max(o.slowT || 0, s.A.slowDur); o.slowVoidT = G.t + s.A.slowDur; }   // slow
       if(s.A.expl){ const er = s.A.expl; G.waves.push({x:s.x, y:s.y, r:er * 2.2 + 14, life:.28, max:.28, col:'#8f6bff', fill:'#3a1a8c'}); for(let i = 0; i < 8 + er * .5; i++) G.parts.push({x:s.x, y:s.y, vx:(Math.random() - .5) * 460, vy:(Math.random() - .5) * 460, life:.45, col:i % 2 ? '#8f6bff' : '#0a0614'}); }   // explosion
+      break;
     }
     if(s.x < -300 || s.x > W + 300 || s.y < -500 || s.y > H + 400) s.life = 0;
   });
@@ -1012,6 +1054,103 @@ function blockHit(o, f){
   G.rings.push({x, y, life:.2}); G.shake = Math.max(G.shake, .06);
   for(let i = 0; i < 10; i++) G.parts.push({x, y:y + (Math.random() - .5) * 30, vx:-o.face * (40 + Math.random() * 220), vy:(Math.random() - .6) * 260, life:.35, col:i % 2 ? '#ffe08a' : '#ffffff'});
   if(G.t - S.popT > .25){ S.popT = G.t; G.pops.push({x:o.x, y:o.y - o.h - 6, txt:'BLOCK', life:.7}); }   // one text per blow, not per damage tick
+}
+// ---- EXPLOSIVE SHOT helpers ----
+// lobAim: the arc for the current aim. Fixed start (in front of his chest, so the preview is exactly the real arc), fixed flight time T (shorter for near throws), gravity d.grav.
+function lobAim(f, o, d, ax, ay, m){
+  const R = d.range || 520, dir = m == null ? f.face : (Math.abs(ax) > .12 ? Math.sign(ax) : f.face);
+  let dist = m == null ? ((o.x - f.x) * dir > 0 && Math.abs(o.x - f.x) <= R ? Math.abs(o.x - f.x) : R * .55) : d.minR + (R - d.minR) * clampN(m, 0, 1);
+  dist = clampN(dist, d.minR, R);
+  const tx = clampN(f.x + dir * dist, 20, W - 20), gy = groundAt(tx, Math.abs(tx - o.x) < 70 ? o.y : f.y);
+  const sx = f.x + dir * 18, sy = f.y - 34, ty = gy == null ? f.y : gy, T = d.flight * (.6 + .4 * dist / R);
+  return {tx, ty, ground:gy != null, sx, sy, vx:(tx - sx) / T, vy:((ty - sy) - .5 * d.grav * T * T) / T, T, dir};
+}
+function lobStep(f, dt){
+  const L = f.lob;
+  if(f.stun > 0 || f.capturedBy != null || f.onsl || f.slaughter || !f.A || f.A.skill !== 'lobshot'){ f.lob = null; return; }   // hit during the wind-up: the shell is never thrown (cooldown is spent)
+  L.t += dt;
+  if(L.t < L.at) return;
+  f.lob = null;
+  const d = L.d, a = L.a;
+  const A = {time:.3, cd:0, reach:0, hitFrom:0, hitTo:0, dmg:d.dmg, kbx:d.kbx, kby:d.kby, stunx:d.stunx, shake:d.shake, hitstop:d.hitstop, noSlash:true, step:0, hid:++HID};
+  (G.sh = G.sh || []).push({id:f.c.id, c:f.c, idx:f.idx, team:f.team, A, x:a.sx, y:a.sy, vx:a.vx, vy:a.vy, g:d.grav, r:d.r, life:a.T + 1.5, age:0, kind:'bomb', cl:0, crit:false, blast:d.radius, dir:a.dir});
+  G.rings.push({x:a.sx, y:a.sy, life:.2});
+}
+function bombBlast(s){   // instant area damage around the impact point: enemies inside the radius are hurt and pushed away from the blast, everyone else is untouched
+  s.life = 0; const R = s.blast, src = G.f[s.idx];
+  G.waves.push({x:s.x, y:s.y, r:R, life:.3, max:.3, col:'#ffb84a', fill:'#ff6a1a'}); G.rings.push({x:s.x, y:s.y, life:.25}); G.shake = Math.max(G.shake, .28);
+  for(let i = 0; i < 22; i++){ const a = Math.random() * 6.28, v = 120 + Math.random() * 420; G.parts.push({x:s.x, y:s.y, vx:Math.cos(a) * v, vy:Math.sin(a) * v - 80, life:.4 + Math.random() * .2, col:['#ffd27a', '#ff8a2a', '#3a2a22', '#fff2c4'][i % 4]}); }
+  G.f.forEach(o => {
+    if(o.dead || o.team === s.team || o.inv > 0 || o.capturedBy != null) return;
+    if(Math.hypot(s.x - clampN(s.x, o.x - o.w / 2, o.x + o.w / 2), s.y - clampN(s.y, o.y - o.h, o.y)) > R) return;   // outside the radius: nothing
+    hurt(o, {c:s.c, A:s.A, face:Math.sign(o.x - s.x) || s.dir, src});
+  });
+}
+// ---- DEADEYE SNIPER (Caliber held key): hold ATK = he kneels, raises the rifle and you AIM it. After d.aim s the shot is READY; let go = fire. Let go earlier = nothing fires. ----
+// hold:{kind:'sniper', after, kneel, aim, turn, cd, cancelCd, recover, shot:{r, speed, life, dmg, kbx, kby, stunx, shake, hitstop}} in skills.js.
+// f.snipe = {t, ph:'aim'|'recover', ready, ang, rt, err, botRel}. ang = rifle elevation in radians (0 = level, + = up), the side he faces comes from f.face. art.js reads f.snipe to pose him and draw the laser.
+// He is rooted (no walking / jumping / dropping, normal attacks blocked). The bullet is its own projectile: it does NOT use the Bullet Chamber magazine and is NOT blocked by the reload.
+// f.snCd = the sniper's own cooldown (starts when he FIRES, hit or miss; a cancelled aim only costs d.cancelCd). f.snLock = ATK must be let go before a new aim can start.
+const SN_MIN = -.95, SN_MAX = 1.35;                                       // lowest / highest rifle angle (rad)
+const snipeDefer = f => { const d = f.K.hold; return !!d && d.kind === 'sniper' && !f.A.skill && f.in.held && !f.snLock && f.snCd <= 0 && f.heldT < d.after; };   // ATK just went down: hold back the first pistol shot until we know it is a tap and not a hold (so starting a snipe never wastes a magazine bullet)
+function sniperEnd(f, cd){
+  f.snipe = null; f.snLock = true;
+  if(f.A && f.A.skill === 'sniper'){ f.atk = 0; f.A = f.base || f.K.basic; }
+  f.atkCd = Math.max(f.atkCd, .25); f.snCd = Math.max(f.snCd || 0, cd || 0); f.comboT = 0;
+}
+function sniperFire(f, S, d){
+  const sh = d.shot, hw = f.handW && f.handW.S, ca = Math.cos(S.ang), sa = Math.sin(S.ang);
+  const x = hw ? hw.x : f.x + f.face * 26 * ca, y = hw ? hw.y : f.y - 24 - 26 * sa;
+  const A = {time:.3, cd:0, reach:0, hitFrom:0, hitTo:0, dmg:sh.dmg, kbx:sh.kbx, kby:sh.kby, stunx:sh.stunx, shake:sh.shake, hitstop:sh.hitstop, noSlash:true, step:0, snipe:true, hid:++HID};
+  (G.sh = G.sh || []).push({id:f.c.id, c:f.c, idx:f.idx, team:f.team, A, x, y, vx:f.face * ca * sh.speed, vy:-sa * sh.speed, r:sh.r, life:sh.life, age:0, kind:'sniper', cl:0, crit:false});
+  G.rings.push({x, y, life:.22}); G.shake = Math.max(G.shake, .18);
+  for(let i = 0; i < 12; i++){ G.parts.push({x, y, vx:f.face * ca * (200 + Math.random() * 500) + (Math.random() - .5) * 120, vy:-sa * (200 + Math.random() * 300) + (Math.random() - .5) * 160, life:.3, col:i % 2 ? '#ffd27a' : '#7ffff0'}); }
+}
+function sniperStep(f, dt){
+  const d = f.K.hold, i = f.in;
+  f.heldT = i.held ? (f.heldT || 0) + dt : 0;
+  if(!i.held) f.snLock = false;
+  if(f.snCd > 0) f.snCd = Math.max(0, f.snCd - dt);
+  const S = f.snipe;
+  if(S){
+    if(f.stun > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.hk || f.shd || f.uhand || !f.gr || !f.A || f.A.skill !== 'sniper'){ sniperEnd(f, d.cancelCd); return; }   // hit / caught / lost the floor: the aim is cancelled
+    S.t += dt; S.kn = Math.min(1, S.t / d.kneel); S.k = Math.min(1, S.t / (d.kneel + d.aim)); f.atk = .5; f.atkCd = Math.max(f.atkCd, .2); f.aqB = 0; f.vx = 0;                       // f.atk is only a "pose is on" flag: art.js poses him from f.snipe
+    if(S.ph === 'recover'){ S.rt += dt / d.recover; if(S.rt >= 1) sniperEnd(f, 0); return; }
+    const o = f.cur;
+    if(f.idx === 0){                                                                                    // YOU: joystick / ATK drag aim directly, keys tilt and turn
+      const v = i.aim;
+      if(v){
+        if(Math.abs(v.x) > .35) f.face = Math.sign(v.x);
+        const tg = Math.max(SN_MIN, Math.min(SN_MAX, Math.atan2(-v.y, Math.max(Math.abs(v.x), .02)))), st = d.turn * dt;
+        S.ang += Math.max(-st, Math.min(st, tg - S.ang));
+      }else{
+        if(i.r - i.l) f.face = i.r - i.l;
+        S.ang = Math.max(SN_MIN, Math.min(SN_MAX, S.ang - (i.ay || 0) * d.turn * .6 * dt));
+      }
+    }else if(o){                                                                                        // BOT: swings the rifle toward the enemy (a little off, less off on Hard)
+      const dx = o.x - f.x;
+      if(Math.abs(dx) > 20) f.face = Math.sign(dx);
+      const tg = Math.max(SN_MIN, Math.min(SN_MAX, Math.atan2(-((o.y - o.h / 2) - (f.y - 26)), Math.abs(dx)) + S.err)), st = d.turn * .6 * dt;
+      S.ang += Math.max(-st, Math.min(st, tg - S.ang));
+      if(!S.ready && Math.abs(dx) < 90) i.held = false;                                                 // enemy walked up to him: gives up
+      if(S.ready && G.t >= S.botRel) i.held = false;                                                    // lets go a moment after the lock
+    }
+    if(!S.ready && S.t >= d.kneel + d.aim){                                                             // LOCKED: the shot is ready
+      S.ready = true; G.rings.push({x:f.x + f.face * 20, y:f.y - 26, life:.3}); G.pops.push({x:f.x, y:f.y - f.h - 30, txt:'LOCKED', life:.6});
+    }
+    if(!i.held){
+      if(S.ready){ sniperFire(f, S, d); S.ph = 'recover'; S.rt = 0; f.snCd = d.cd; }                    // fire: the cooldown starts now, hit or miss
+      else sniperEnd(f, d.cancelCd);                                                                    // too early: nothing is fired
+    }
+    return;
+  }
+  if(i.held && !f.snLock && f.heldT >= d.after && f.snCd <= 0 && f.gr && f.stun <= 0 && !f.slaughter && !f.hk && !f.rush && !f.sc && !f.shd && !f.uhand && !f.onsl && f.capturedBy == null && (f.atk <= 0 || (!f.A.skill && !f.hitDone))){
+    const o = f.cur;
+    const S = f.snipe = {t:0, kn:0, k:0, ph:'aim', ready:false, rt:0, ang:0, err:(Math.random() - .5) * 2 * (G.cfg.difficulty === 'Easy' ? .2 : G.cfg.difficulty === 'Hard' ? .04 : .1), botRel:G.t + d.kneel + d.aim + .1 + Math.random() * .5};
+    if(o && (o.x - f.x) * f.face > 0) S.ang = Math.max(SN_MIN, Math.min(SN_MAX, Math.atan2(-((o.y - o.h / 2) - (f.y - 26)), Math.abs(o.x - f.x))));   // the rifle starts pointing at the enemy (then it is yours to steer)
+    startSkillA(f, skillA(d, {time:1, root:true, noSlash:true, snipe:S}));
+    f.atk = .5; f.comboT = 0; f.charging = false; f.chg = 0; f.aqB = 0; f.vx = 0;
+  }
 }
 // ---- VILE OFFERING (held key): hold ATK = he vomits. A COMPLETED vomit leaves one acid puddle. Let go early = no puddle. ----
 function vomitCancel(f){
@@ -1105,12 +1244,14 @@ function stepF(f, o, dt){
   f.atkCd -= dt; f.comboT -= dt; f.aqB -= dt; f.stun -= dt; f.inv -= dt; f.drop -= dt; f.flash -= dt;
   f.sk.forEach(k => { for(let i = 0; i < k.cd.length; i++) k.cd[i] = Math.max(0, k.cd[i] - dt); });   // every charge recharges on its own
   f.uc = Math.max(0, f.uc - dt);
+  chamberStep(f, dt);                                                                                     // Bullet Chamber: reload timer
+  if(f.lob) lobStep(f, dt);                                                                               // Explosive Shot wind-up
   if(f.pt > 0){ f.pt -= dt; if(f.pt <= 0) f.bar = 0; }                                                  // passive timer: boost + barrier end together
   const sp = f.c.spd * 52 * (f.pt > 0 ? 1 + f.K.passive.speed : 1) * (f.slowT > 0 ? 1 - f.slowAmt : 1);   // slowAmt = from the enemy's Putrid Stench
   if(f.fe > 0) f.fe -= dt;                                                                               // False Existence cooldown
   if(f.bl > 0) bleedTick(f, dt);
   if(f.stench) stenchStep(f, o, dt);
-  if(f.K.hold) (f.K.hold.kind === 'aegis' ? aegisStep : vomitStep)(f, dt);
+  if(f.K.hold) ({aegis:aegisStep, vomit:vomitStep, sniper:sniperStep}[f.K.hold.kind] || vomitStep)(f, dt);
   if(f.vclaw) clawStep(f, o, dt);
   if(f.afterimg){ f.afterimg.t += dt; if(f.afterimg.t > f.afterimg.life) f.afterimg = null; }
   if(f.slam) slamStep(f, dt);
@@ -1128,14 +1269,15 @@ function stepF(f, o, dt){
     const dir = f.in.r - f.in.l;
     const rooted = f.gr && f.atk > 0 && f.A.root;              // rooted punch: feet stay planted on the ground (no walking while swinging, so no foot sliding)
     const slowCharge = f.charging && f.A.chargeMove;               // Void Orb: he can shuffle slowly while charging (chargeMove = share of his speed)
-    if(rooted && !slowCharge){ if(dir && !f.aegis) f.face = dir; f.vx = approach(f.vx, 0, (f.lunged ? 1800 : 3000) * dt); }
+    if(rooted && !slowCharge){ if(dir && !f.aegis && !f.snipe) f.face = dir; f.vx = approach(f.vx, 0, (f.lunged ? 1800 : 3000) * dt); }
     else if(dir){ f.face = dir; f.vx = approach(f.vx, dir * sp * (slowCharge ? f.A.chargeMove : 1), (f.gr ? 3000 : 1600) * dt); }
     else f.vx = approach(f.vx, 0, (f.gr ? (f.atk > 0 && f.A.lunge ? 1800 : 2600) : 500) * dt);   // lunge slides (momentum) instead of stopping dead
-    if(f.jq && f.jumps > 0 && !f.aegis){ f.vy = f.jumps === 2 ? -840 : -780; f.jumps--; f.gr = false; }
-    if(f.dq && f.gr && !f.aegis){ f.drop = .22; f.y += 3; f.gr = false; }
+    if(f.jq && f.jumps > 0 && !f.aegis && !f.snipe){ f.vy = f.jumps === 2 ? -840 : -780; f.jumps--; f.gr = false; }
+    if(f.dq && f.gr && !f.aegis && !f.snipe){ f.drop = .22; f.y += 3; f.gr = false; }
     if(!f.base) f.base = f.A;                                  // basic attack numbers (combo steps are layered on top)
     if(f.aq && f.base.combo) f.aqB = .18;                     // small input buffer, only for combo characters
-    if((f.aq || f.aqB > 0) && f.atkCd <= 0){
+    if(f.rl > 0) f.aqB = 0;                                    // reloading: a buffered ATK press is thrown away (no surprise shot when the reload ends)
+    if((f.aq || f.aqB > 0) && f.atkCd <= 0 && !(f.rl > 0)){   // reloading = he cannot start an attack (he can still walk and jump)
       const cb = f.base.combo;
       if(cb){ f.cs = f.comboT > 0 ? (f.cs + 1) % cb.length : 0; f.A = {...f.base, ...cb[f.cs], step:f.cs}; f.comboT = f.A.cd + .45; }else if(f.A.skill) f.A = f.base;   // next hit of the combo (after a skill: back to the basic attack numbers)
       f.atk = f.A.time; f.atkCd = f.A.cd; f.hitDone = false; f.aqB = 0;
@@ -1162,7 +1304,7 @@ function stepF(f, o, dt){
       if(f.A.lunge) f.vx = f.face * f.A.lunge;
       if(f.A.hop && f.gr){ f.vy = -f.A.hop; f.gr = false; } }
     const sh0 = f.A.cl > 0 && f.A.chargeShot ? f.A.chargeShot : f.A.shot;   // a charged release (held ATK) fires chargeShot instead of shot
-    if(sh0 && !f.fired && 1 - f.atk / f.A.time >= sh0.p){ f.fired = 1; shoot(f, sh0); }   // skills.js shot:{...} = fire a projectile (see shoot below)
+    if(sh0 && !f.fired && 1 - f.atk / f.A.time >= sh0.p && !snipeDefer(f)){ f.fired = 1; shoot(f, sh0); }   // skills.js shot:{...} = fire a projectile (see shoot below)
     if(!f.hitDone && f.atk < f.A.hitFrom && f.atk > f.A.hitTo){
       const hx = f.face > 0 ? f.x + f.w/2 : f.x - f.w/2 - f.A.reach;
       if(hx < o.x + o.w/2 && hx + f.A.reach > o.x - o.w/2 && f.y - f.h < o.y && f.y > o.y - o.h && o.inv <= 0){ hurt(o, f); f.hitDone = true; }
@@ -1199,20 +1341,26 @@ function think(f, o, dt){
   const dx = o.x - f.x;
   const dy = (o.y - o.h/2) - (f.y - f.h/2);
   const ax = Math.abs(dx), ay = Math.abs(dy), dir = Math.sign(dx) || f.face;
-  if(!f.aegis) f.face = dir;                                      // planted behind the shield: he keeps facing the same way
+  if(!f.aegis && !f.snipe) f.face = dir;                                      // planted behind the shield: he keeps facing the same way
 
   if(f.K.hold && f.K.hold.kind === 'aegis'){   // Aegis Stance: plant it when the enemy is a bit away (the setup is slow); hold it while they are in front, let go when they are close, behind or it has been long enough
     const hd = f.K.hold, front = (o.x - f.x) * f.face > 0;
     i.held = f.aegis ? (f.aegis.t < hd.setup + 2.5 && front && ax > 55 && ax < 460) : (f.gr && ax >= 170 && ax < 460 && ay < 90 && Math.random() < .3);
   }
-  if(f.K.hold && f.K.hold.kind !== 'aegis'){   // held-key attack (Vile Offering): the bot holds ATK when the enemy is a bit away, so the puddle lands near them
+  if(f.K.hold && f.K.hold.kind === 'sniper'){   // Deadeye Sniper: the bot starts an aim when the enemy is at a distance and the sniper is ready (it lets go by itself inside sniperStep)
+    if(!f.snipe){
+      if(!i.held) i.held = f.snCd <= 0 && f.gr && f.atk <= 0 && !f.snLock && ax >= 220 && ax <= 560 && ay < ax * .8 && Math.random() < (G.cfg.difficulty === 'Hard' ? .5 : .3);
+      else if(f.heldT > .8) i.held = false;       // could not start: let go
+    }
+  }
+  if(f.K.hold && f.K.hold.kind === 'vomit'){   // held-key attack (Vile Offering): the bot holds ATK when the enemy is a bit away, so the puddle lands near them
     const hd = f.K.hold, mine = G.puddles.filter(p => p.owner === f.idx).length;
     i.held = f.gr && ax < hd.w * .7 + hd.ranges[hd.ranges.length - 1] && ay < 80 && (mine < hd.max || Math.random() < .25) && Math.random() < .55;
   }
   // Estimate a useful fighting distance from this character's actual kit.
   const defs = [...(f.K.skills || []), f.K.ultimate].filter(Boolean);
   const ranged = defs.some(d => d.aim && d.kind !== 'shadowhook' && (d.range || d.speed * (d.life || 0)) > 150);
-  const desired = f.K.basic.chargeShot ? 250 : ranged ? 145 : Math.max(48, Math.min(82, (f.K.basic.reach || 46) + 20));
+  const sniperK = f.K.hold && f.K.hold.kind === 'sniper', desired = f.K.basic.chargeShot || sniperK ? 250 : ranged ? 145 : Math.max(48, Math.min(82, (f.K.basic.reach || 46) + 20));
   if(ax > desired + 18){ if(dx > 0) i.r = 1; else i.l = 1; }
   else if(ax < desired - 28 && ranged && Math.random() < (G.cfg.difficulty === 'Hard' ? .7 : .42)){
     if(dx > 0) i.l = 1; else i.r = 1;
@@ -1294,6 +1442,10 @@ function think(f, o, dt){
       case 'shockwave':
         if(ax >= 82 && ax <= (range || 280) * .94 && ay < 125) score = 74;
         break;
+      case 'lobshot': {   // Explosive Shot: lob it at (where the enemy will be) when they are at a middle distance
+        const R = d.range || 520, lead = G.cfg.difficulty === 'Easy' ? 0 : .5, adx = Math.abs(dx + (o.vx || 0) * lead);
+        if(f.gr && !f.snipe && adx >= d.minR + 20 && adx <= R * .94 && ay < 150){ score = 68; aimOv = {ax:Math.sign(dx) || f.face, ay:0, m:clampN((adx - d.minR) / (R - d.minR), 0, 1)}; }
+        break; }
       case 'rush':
         if(f.gr && verticalOK && ax >= 105 && ax <= (d.dist || 0) * .88) score = 72;
         break;
@@ -1327,7 +1479,7 @@ function think(f, o, dt){
   if(cs && ax > 130 && ax < 520 && verticalOK && f.atk <= 0 && f.atkCd <= 0 && !f.in.held && Math.random() < (G.cfg.difficulty === 'Hard' ? .8 : .55)){
     f.aq = true; f.in.held = true; f.aiHoldT = G.t + .55 + Math.random() * .6 + (f.fr >= 5 ? .25 : 0); return;
   }
-  const basicReach = (f.K.basic.reach || 46) + 18;
+  const basicReach = sniperK ? 300 : (f.K.basic.reach || 46) + 18;   // Caliber: his pistols reach far
   if(ax <= basicReach && verticalOK && Math.random() < L.atk) f.aq = true;
 }
 function update(dt){
@@ -1338,6 +1490,7 @@ function update(dt){
     if(Ctl.drop){ a.dq = true; Ctl.drop = false; }
     if(Ctl.atk){ a.aq = true; Ctl.atk = false; }
     a.in.held = Ctl.held;
+    a.in.aim = Ctl.atkV || (Math.hypot(Ctl.sx, Ctl.sy) > .4 ? {x:Ctl.sx, y:Ctl.sy} : null); a.in.ay = Ctl.dn - Ctl.up;   // aiming a held attack (Deadeye Sniper): drag ATK or the stick, or W / S
     [0, 1, 2].forEach(i => { if(Ctl.sk[i]){ a.skq = {i, ...Ctl.sk[i]}; Ctl.sk[i] = null; } });   // skill casts from the buttons / keys 1 2 3
   }else{ Ctl.jump = Ctl.drop = Ctl.atk = false; [0, 1, 2].forEach(i => Ctl.sk[i] = null); }    // you are out: your allies keep fighting
   const live = G.f.filter(f => !f.dead);
@@ -1398,6 +1551,25 @@ function drawF(f){
       cx.fillStyle = on ? (rdy ? '#fff3c4' : '#f5c542') : 'rgba(150,120,40,.3)'; cx.beginPath(); cx.arc(px, py, 4, 0, 7); cx.fill();
       if(on){ cx.strokeStyle = rdy ? 'rgba(255,255,255,' + (.5 + .5 * pu) + ')' : 'rgba(255,236,170,.7)'; cx.lineWidth = 1; cx.stroke(); }
     }
+  }
+  if(f.K.passive && f.K.passive.kind === 'chamber'){   // BULLET CHAMBER: 5 bullets over his head (4 brass + 1 red critical). Fired = dark. Reloading = a bar fills under them.
+    const mx = f.K.passive.max, pu = .5 + .5 * Math.sin(G.t * 12), rl = f.rl > 0;
+    for(let i = 0; i < mx; i++){
+      const px = x - (mx - 1) * 6 + i * 12, py = y - f.h - 28, on = i >= f.mag && !rl, last = i === mx - 1;
+      const bw = last ? 4.5 : 3.5, bh = last ? 12 : 10;
+      cx.fillStyle = on ? (last ? '#ff4a2e' : '#e8b84a') : 'rgba(60,60,70,.55)';
+      cx.beginPath(); cx.rect(px - bw, py - bh / 2 + 3, bw * 2, bh - 3); cx.fill();                       // case
+      cx.beginPath(); cx.moveTo(px - bw, py - bh / 2 + 3); cx.quadraticCurveTo(px, py - bh / 2 - 5, px + bw, py - bh / 2 + 3); cx.fill();   // round tip
+      if(on && last){ cx.shadowColor = '#ff4a2e'; cx.shadowBlur = 6 + 8 * (f.mag === mx - 1 ? pu : .3); cx.strokeStyle = '#ffd0c0'; cx.lineWidth = 1; cx.stroke(); cx.shadowBlur = 0; }   // the critical one glows; brighter when it is NEXT
+    }
+    if(rl){ const k = 1 - f.rl / f.K.passive.reload, bx = x - 18, by = y - f.h - 17; cx.fillStyle = 'rgba(0,0,0,.45)'; cx.fillRect(bx, by, 36, 4); cx.fillStyle = '#2fb8a0'; cx.fillRect(bx, by, 36 * k, 4); }
+  }
+  if(f.K.hold && f.K.hold.kind === 'sniper'){   // DEADEYE SNIPER: a scope icon left of the bullets. Teal = ready, dark pie = cooling down, ring = aim progress (red + pulsing = LOCKED, release to fire).
+    const d = f.K.hold, S = f.snipe, ix = x - 42, iy = y - f.h - 25, R = 7, pu = .5 + .5 * Math.sin(G.t * 16), cdk = f.snCd > 0 ? f.snCd / d.cd : 0;
+    cx.fillStyle = 'rgba(10,14,20,.7)'; cx.beginPath(); cx.arc(ix, iy, R + 1.5, 0, 7); cx.fill();
+    cx.strokeStyle = cdk > 0 ? 'rgba(127,255,240,.3)' : '#7ffff0'; cx.lineWidth = 1.2; cx.beginPath(); cx.arc(ix, iy, R - 2, 0, 7); cx.moveTo(ix - R, iy); cx.lineTo(ix + R, iy); cx.moveTo(ix, iy - R); cx.lineTo(ix, iy + R); cx.stroke();
+    if(cdk > 0){ cx.fillStyle = 'rgba(0,0,0,.6)'; cx.beginPath(); cx.moveTo(ix, iy); cx.arc(ix, iy, R + 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * cdk); cx.closePath(); cx.fill(); }
+    if(S && S.ph === 'aim'){ const k = Math.min(1, S.t / (d.kneel + d.aim)); cx.strokeStyle = S.ready ? 'rgba(255,70,60,' + (.6 + .4 * pu) + ')' : '#ffd27a'; cx.lineWidth = 2.2; cx.beginPath(); cx.arc(ix, iy, R + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); cx.stroke(); }
   }
   if(f.slowHolyT > G.t){ cx.strokeStyle = 'rgba(255,214,90,.8)'; cx.lineWidth = 2; cx.beginPath(); cx.ellipse(x, y - 2, 18, 5, 0, 0, 7); cx.stroke(); }   // holy slow: gold ring at the feet
   if(f.arE > 0){ cx.strokeStyle = 'rgba(255,100,80,.8)'; cx.lineWidth = 2; cx.setLineDash([5, 4]); cx.beginPath(); cx.ellipse(x, y - f.h / 2, 20, f.h / 2 + 6, 0, 0, 7); cx.stroke(); cx.setLineDash([]); }   // armor broken (Heaven's Verdict): red dashed outline
@@ -1471,16 +1643,6 @@ function draw(){
   });
   G.f.forEach(f => { const a = Characters.artOf(f.c.id); if(a.fxBack){ cx.save(); a.fxBack(cx, f, G.t, G); cx.restore(); } });   // per-hero effects under the bodies (rifts, afterimages, the back of the giant hand)
   G.f.forEach(f => { if(!f.dead) drawF(f); });
-  if((G.cfg.size || 1) > 1) G.f.forEach(f => {   // team match: allies (green) and enemies (red) show their health above their head; only YOUR bar is in the corner
-    if(f.idx === 0 || f.dead) return;
-    const bw = 46, bx = f.x - bw / 2, by = f.y - f.h - 30, r = Math.max(0, Math.min(1, f.hp / f.max));
-    cx.save(); if(f.inv > 0 && Math.floor(G.t * 20) % 2) cx.globalAlpha = .6;
-    cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillRect(bx - 1, by - 1, bw + 2, 7);
-    cx.fillStyle = f.team === 0 ? '#4cd97b' : '#ff4d5e'; cx.fillRect(bx, by, bw * r, 5);
-    if(f.bar > 0){ cx.fillStyle = '#7fd0ff'; cx.fillRect(bx, by + 5, bw * Math.min(1, f.bar / f.max), 2); }   // barrier
-    if(G.mode === 'ai'){ cx.fillStyle = '#fff'; for(let i = 0; i < f.stocks; i++){ cx.beginPath(); cx.arc(f.x - (f.stocks - 1) * 3.5 + i * 7, by - 5, 2, 0, 7); cx.fill(); } }   // stocks left
-    cx.restore();
-  });
   G.f.forEach(f => { const a = Characters.artOf(f.c.id); if(a.fx){ cx.save(); a.fx(cx, f, G.t, G); cx.restore(); } });   // ...and over them (the claw, the fingers)
   G.f.forEach(f => {   // PHANTOM ONSLAUGHT: shadow chains (from each shadow to the target, wrapping it) + the shadows themselves (art.js clone())
     const S = f.onsl; if(!S) return; const ca = Characters.artOf(f.c.id).clone, o = S.target, tx = S.cxo, ty = S.cyo - o.h / 2;
@@ -1566,6 +1728,14 @@ function draw(){
       cx.strokeStyle = 'rgba(190,190,200,.8)'; cx.beginPath(); cx.moveTo(bx - 9, by - 9); cx.lineTo(bx + 9, by + 9); cx.moveTo(bx + 9, by - 9); cx.lineTo(bx - 9, by + 9); cx.stroke();
     }
     cx.restore();
+  }else if(ad && ad.kind === 'lobshot' && !am.cancel){   // Explosive Shot: dotted arc + landing marker (grey X = no ground there, the shell would fall away)
+    const o2 = foeOf(af), a = lobAim(af, o2, ad, am.drag ? am.ax : af.face, am.drag ? am.ay : 0, am.drag ? am.m : null), pu = .6 + .4 * Math.sin(G.t * 10);
+    cx.save(); cx.strokeStyle = 'rgba(255,170,60,.9)'; cx.lineWidth = 3; cx.setLineDash([3, 8]); cx.lineCap = 'round'; cx.beginPath();
+    for(let i = 0; i <= 24; i++){ const t = a.T * i / 24; const px = a.sx + a.vx * t, py = a.sy + a.vy * t + .5 * ad.grav * t * t; i ? cx.lineTo(px, py) : cx.moveTo(px, py); }
+    cx.stroke(); cx.setLineDash([]);
+    if(a.ground){ cx.strokeStyle = 'rgba(255,170,60,.95)'; cx.fillStyle = 'rgba(255,106,26,' + (.2 * pu) + ')'; cx.lineWidth = 2.5; cx.beginPath(); cx.ellipse(a.tx, a.ty - 2, ad.radius, ad.radius * .28, 0, 0, 7); cx.fill(); cx.stroke(); cx.beginPath(); cx.arc(a.tx, a.ty - 2, 4, 0, 7); cx.fillStyle = 'rgba(255,200,120,.95)'; cx.fill(); }
+    else{ cx.strokeStyle = 'rgba(190,190,200,.8)'; cx.beginPath(); cx.moveTo(a.tx - 9, a.ty - 9); cx.lineTo(a.tx + 9, a.ty + 9); cx.moveTo(a.tx + 9, a.ty - 9); cx.lineTo(a.tx - 9, a.ty + 9); cx.stroke(); }
+    cx.restore();
   }else if(ad && ad.aim && !am.cancel){   // aim preview while dragging a skill button: a dashed line the way the skill will go
     const rushK = ad.kind === 'rush', ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0;
     const dx = rushK ? (Math.sign(ax) || af.face) : ax, dy = rushK ? 0 : ay, len = rushK ? ad.dist : (ad.range || ad.speed * ad.life), y0 = af.y - (rushK ? af.h / 2 : 34);
@@ -1589,7 +1759,6 @@ function draw(){
 
   const big = (G.cfg.size || 1) > 1;   // team match: smaller bars stacked down each side (your team left, the other team right)
   G.f.forEach(f => {
-    if(big && f.idx !== 0) return;   // team match: only your bar lives in the corner (the others float above their heads)
     const i = f.team === 1, w = big ? Math.min(210, view.w * .27) : Math.min(260, view.w * .34), x = i ? view.w - w - 12 : 12, y = 56 + (big ? (f.tslot || 0) * 38 : 0);
     const tag = big ? (f.idx === 0 ? 'YOU ' : f.team === 0 ? 'ALLY ' : 'FOE ') : (i ? 'P2 ' : 'P1 ');
     cx.save(); if(f.dead) cx.globalAlpha = .35;
@@ -1666,7 +1835,7 @@ addEventListener('keydown', e => {
 
 // ---- SKILL INFO: the (i) button above the ultimate opens a side panel (overlay, not a modal). The match is frozen while it is open and continues when you close it.
 //      Each row: name, type, cooldown, damage (shown for THIS opponent: same formula as a hit, ~ = rounded) and the text. Text = `desc` in the character's skills.js (optional), `type` overrides the type label.
-const KIND_TYPE = {shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', slaughterhouse:'Grab - Ultimate', marks:'Passive'};
+const KIND_TYPE = {shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', sniper:'Held key - aimed shot', lobshot:'Arc projectile - area blast', slaughterhouse:'Grab - Ultimate', marks:'Passive'};
 const dmgNum = (f, o, m) => Math.round((10 + f.c.hp / 40) * 2.2 * (1 - armOf(o) / 50) * m);
 function infoRows(){
   const f = G.f[0], o = foeOf(f), K = f.K, rows = [], B = K.basic;
@@ -1674,7 +1843,7 @@ function infoRows(){
   const dmgTxt = d => d.kind === 'abysshand' ? '~' + dmgNum(f, o, d.ticks * d.tickDmg + d.crushDmg + d.slamDmg) + ' total' : d.kind === 'shadowstep' ? '-' : d.tickDmg ? '~' + dmgNum(f, o, Math.floor((d.frenzy || 1.5) / (d.tick || .09)) * d.tickDmg + d.finishDmg) + ' total' : d.hits ? '~' + dmgNum(f, o, d.hits.reduce((a, h) => a + h.dmg, 0)) + ' total' : d.dps ? '~' + Math.round(o.max * d.dps) + '/s' : d.dmg ? '~' + dmgNum(f, o, d.dmg) : '-';
   rows.push({tag:'ATK', name:'Basic attack', type:B.combo ? B.combo.length + '-hit combo' : 'Basic attack', cd:'-', dmg:B.combo ? '~' + B.combo.map(c => dmgNum(f, o, c.dmg ?? B.dmg)).join(' / ') : '~' + dmgNum(f, o, B.dmg), desc:B.desc});
   if(K.passive) rows.push({tag:'PAS', name:K.passive.name, type:K.passive.type || 'Passive', cd:K.passive.cd ? K.passive.cd + 's' : '-', dmg:K.passive.dps ? '~' + Math.round(o.max * K.passive.dps) + '/s bleed' : '-', desc:K.passive.desc});
-  if(K.hold) rows.push({tag:'HOLD', name:K.hold.name, type:K.hold.type || KIND_TYPE[K.hold.kind] || 'Held key', cd:'-', dmg:K.hold.dps ? '~' + Math.round(o.max * K.hold.dps) + '/s each' : '-', desc:K.hold.desc});
+  if(K.hold) rows.push({tag:'HOLD', name:K.hold.name, type:K.hold.type || KIND_TYPE[K.hold.kind] || 'Held key', cd:K.hold.cd != null ? K.hold.cd + 's' : '-', dmg:K.hold.shot ? '~' + dmgNum(f, o, K.hold.shot.dmg) : K.hold.dps ? '~' + Math.round(o.max * K.hold.dps) + '/s each' : '-', desc:K.hold.desc});
   K.skills.forEach((d, i) => d && d.name && rows.push({tag:i ? 'II' : 'I', name:d.name, type:d.type || KIND_TYPE[d.kind] || (d.aim ? 'Aimed skill' : 'Skill'), cd:cdTxt(d), dmg:dmgTxt(d), desc:d.desc}));
   const u = K.ultimate; if(u && u.name) rows.push({tag:'ULT', name:u.name, type:u.type || KIND_TYPE[u.kind] || 'Ultimate', cd:cdTxt(u), dmg:dmgTxt(u), desc:u.desc});
   return rows;

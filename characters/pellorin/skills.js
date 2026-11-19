@@ -1,4 +1,4 @@
-// MARIONETTIS skills - the String Master. He does not hit. His small PUPPET walks on the ground, tied to his near hand by a string, and the puppet hits.
+// PELLORIN skills - the String Master. He does not hit. His small PUPPET walks on the ground, tied to his near hand by a string, and the puppet hits.
 // COMBO (press ATK again to keep it going): 1 JAB (puppet runs in and stabs)   2 SPIN (puppet whirls two blades)   3 LEAP SLAM (puppet jumps and smashes a mallet, knocks up).
 // HOLD ATK = FOCUS: he freezes with his hand up, the puppet floats and starts to grow (chargeP = .3, must match CP in art.js).
 //   Let go = the puppet becomes a MONSTER PUPPET for a short time: bigger, hits harder and reaches farther. The let-go hit is a big slam.
@@ -14,7 +14,7 @@
 //   dmg = damage multiplier on normal hits at full beast, reach = dash multiplier at full beast, cd = seconds before the next beast can start,
 //   slam = the pup box of the let-go slam.
 // TUNE HERE: dmg (main balance knob), string.leash (range), beast.min / beast.max / beast.cd (how often and how long he is a beast).
-Characters.skills('marionettis', {
+Characters.skills('pellorin', {
   basic: {time:.5, cd:.5, noSlash:true, noShake:true, hitFrom:0, hitTo:0, dmg:.6, kbx:.35, kby:.2, stunx:1, hitstop:0,
     chargeP:.3, chargeMin:.2, chargeMax:1.2,
     string: {leash:170, follow:46, speed:300},

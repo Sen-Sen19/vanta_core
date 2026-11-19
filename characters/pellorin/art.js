@@ -1,4 +1,4 @@
-// MARIONETTIS art - the String Master. Same shared ragdoll (body.js): small size changes, red coat, top hat, short cape.
+// PELLORIN art - the String Master. Same shared ragdoll (body.js): small size changes, red coat, top hat, short cape.
 // The PUPPET is also made here. arena.js has no puppet, so this file keeps the puppet state on the fighter (f.pup),
 // moves it and checks its hit once per frame inside front(), using the game clock G.t (so pause and hit-stop work). It calls hurt() from arena.js for damage.
 // Hooks used: body, colors, spring(), attack() = his hand moves like a puppeteer, pose() = hand held forward holding the strings,
@@ -15,7 +15,7 @@
   const hexRGB = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
   const mixc = (a, b, t) => { const A = hexRGB(a), B = hexRGB(b); return 'rgb(' + A.map((v, i) => Math.round(lerp(v, B[i], t))).join(',') + ')'; };
   let _sk = null;
-  const SK = () => _sk || (_sk = Characters.skillsOf('marionettis').basic);
+  const SK = () => _sk || (_sk = Characters.skillsOf('pellorin').basic);
 
   // ---- HIS HAND: near arm gestures, one per combo step. p = 0..1 over the swing. ----
   const ARM = [
@@ -332,7 +332,7 @@
       cx.fillStyle = '#ffb03a'; cx.fillRect(P.x - 10, P.y - an.lift - 28 * sc - 6, 20 * k, 1.4); }
   }
 
-  Characters.art('marionettis', {
+  Characters.art('pellorin', {
     // a little taller and slim. Hitbox is still 30x52 (arena.js is not changed per character).
     body: {head:{r:6.3}, torso:{len:12.5, w:10.5}, uArm:{len:9.5, w:4.2}, fArm:{len:9.5, w:3.8}, hand:{r:2.9}, shN:1, shF:-3.5, thigh:{len:10.5, w:5.4}, shin:{len:10, w:4.6}, foot:{len:7.5, w:3.4}},
     colors: {shirt:'#b8324f', limb:'#d9486a', far:'#7e2036', legs:'#2a1830', legsFar:'#1c1022', head:'#f0d9c8', dark:'#2a1020', hand:'#f2e6d8'},

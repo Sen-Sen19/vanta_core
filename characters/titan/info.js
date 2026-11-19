@@ -1,0 +1,1 @@
+Characters.add({id:'titan', name:'TITAN', role:'Heavy', color:'#ff7a1a', tag:'The Walking Juggernaut', hp:300, arm:10, spd:3.4, ult:'TOTAL EXTINCTION'});

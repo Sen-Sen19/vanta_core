@@ -1,0 +1,1 @@
+Characters.add({id:'caliber', name:'CALIBER', role:'Sniper', color:'#2fb8a0', tag:'The Walking Arsenal', hp:185, arm:4, spd:5.0, ult:'OPEN ARSENAL'});

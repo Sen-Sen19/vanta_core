@@ -1,0 +1,1 @@
+Characters.add({id:'noctis', name:'NOCTIS', role:'Ninja', color:'#5c6bff', tag:'Gone Before You Blink', hp:200, arm:5, spd:6.2, ult:'PHANTOM ONSLAUGHT'});

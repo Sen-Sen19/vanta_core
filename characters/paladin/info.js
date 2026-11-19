@@ -1,0 +1,1 @@
+Characters.add({id:'paladin', name:'PALADIN', role:'Tank', color:'#e3b53c', tag:'The Divine Bastion', hp:280, arm:12, spd:3.0, ult:"HEAVEN'S VERDICT"});

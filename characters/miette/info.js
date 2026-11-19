@@ -1,0 +1,1 @@
+Characters.add({id:'miette', name:'MIETTE', role:'Creator', color:'#ff5fa2', tag:'The Little Creator', hp:160, arm:3, spd:5.2, ult:'MASTERPIECE'});

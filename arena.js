@@ -1643,6 +1643,17 @@ function draw(){
   });
   G.f.forEach(f => { const a = Characters.artOf(f.c.id); if(a.fxBack){ cx.save(); a.fxBack(cx, f, G.t, G); cx.restore(); } });   // per-hero effects under the bodies (rifts, afterimages, the back of the giant hand)
   G.f.forEach(f => { if(!f.dead) drawF(f); });
+  if((G.cfg.size || 1) > 1) G.f.forEach(f => {   // team match: allies (green) and enemies (red) show their health above their head; only YOUR bar is in the corner
+  if(f.idx === 0 || f.dead) return;
+  const bw = 46, bx = f.x - bw / 2, by = f.y - f.h - 30, r = Math.max(0, Math.min(1, f.hp / f.max));
+  cx.save(); if(f.inv > 0 && Math.floor(G.t * 20) % 2) cx.globalAlpha = .6;
+  cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillRect(bx - 1, by - 1, bw + 2, 7);
+  cx.fillStyle = f.team === 0 ? '#4cd97b' : '#ff4d5e'; cx.fillRect(bx, by, bw * r, 5);
+  if(f.bar > 0){ cx.fillStyle = '#7fd0ff'; cx.fillRect(bx, by + 5, bw * Math.min(1, f.bar / f.max), 2); }   // barrier
+  if(G.mode === 'ai'){ cx.fillStyle = '#fff'; for(let i = 0; i < f.stocks; i++){ cx.beginPath(); cx.arc(f.x - (f.stocks - 1) * 3.5 + i * 7, by - 5, 2, 0, 7); cx.fill(); } }   // stocks left
+  cx.restore();
+});
+
   G.f.forEach(f => { const a = Characters.artOf(f.c.id); if(a.fx){ cx.save(); a.fx(cx, f, G.t, G); cx.restore(); } });   // ...and over them (the claw, the fingers)
   G.f.forEach(f => {   // PHANTOM ONSLAUGHT: shadow chains (from each shadow to the target, wrapping it) + the shadows themselves (art.js clone())
     const S = f.onsl; if(!S) return; const ca = Characters.artOf(f.c.id).clone, o = S.target, tx = S.cxo, ty = S.cyo - o.h / 2;
@@ -1757,10 +1768,12 @@ function draw(){
   cx.globalAlpha = 1;
   cx.restore();
 
-  const big = (G.cfg.size || 1) > 1;   // team match: smaller bars stacked down each side (your team left, the other team right)
-  G.f.forEach(f => {
-    const i = f.team === 1, w = big ? Math.min(210, view.w * .27) : Math.min(260, view.w * .34), x = i ? view.w - w - 12 : 12, y = 56 + (big ? (f.tslot || 0) * 38 : 0);
-    const tag = big ? (f.idx === 0 ? 'YOU ' : f.team === 0 ? 'ALLY ' : 'FOE ') : (i ? 'P2 ' : 'P1 ');
+const big = (G.cfg.size || 1) > 1;
+G.f.forEach(f => {
+  const i = f.team === 1, w = big ? Math.min(210, view.w * .27) : Math.min(260, view.w * .34), x = i ? view.w - w - 12 : 12, y = 56 + (big ? (f.tslot || 0) * 38 : 0);
+   
+   if(big && f.idx !== 0) return;
+   const tag = big ? (f.idx === 0 ? 'YOU ' : f.team === 0 ? 'ALLY ' : 'FOE ') : (i ? 'P2 ' : 'P1 ');
     cx.save(); if(f.dead) cx.globalAlpha = .35;
     cx.textAlign = i ? 'right' : 'left'; cx.fillStyle = '#fff'; cx.font = '700 ' + (big ? 12 : 13) + 'px system-ui';
     cx.fillText(tag + f.c.name, i ? x + w : x, y - 8);

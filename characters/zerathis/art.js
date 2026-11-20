@@ -1,11 +1,11 @@
 // ZERATHIS art - tall regal ice king. Same shared ragdoll (body.js): only sizes, colors, a calm pose and ice props.
 // Look: ice crown, crystal shoulder pauldrons, frost cape behind, a short robe front, glowing ice-blue eye, cold mist at his feet.
-// HOLD ATK = GLACIAL LANCE: both hands in front of his chest, an ice lance grows between them. Let go = he thrusts it out (see skills.js chargeShot).
-// Hooks used: body (sizes), colors, farFront, spring(), attack() = the 3 casts + the lance, pose() = calm royal stance,
-//             behind() = frost cape + mist, front() = crown, eye, pauldrons, robe, cast frost, lance, handW, shot() = how the flying ice looks (drawn by arena.js).
+// HOLD ATK = ICE PROJECTILE (skills.js hold, same manual-aim engine as Caliber's sniper): he plants himself, the near arm points along f.snipe.ang, a big ice shard grows at the palm and a dotted guide shows
+//   the flight line (bright pulsing ring = READY, let go to throw). Skills: WINTER'S GRASP (near hand slams down), CRYSTAL COFFIN (both hands close), ETERNAL ICE AGE (3 s arms-up cast, slam at the end).
+// Hooks used: body (sizes), colors, farFront, spring(), attack() = the 3 casts + skill / hold poses, pose() = calm royal stance,
+//             behind() = frost cape + mist, front() = crown, eye, pauldrons, robe, cast frost, shard + aim guide, handW, shot() = how the flying ice looks (drawn by arena.js).
 (() => {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const CP = .3;                                  // lance freeze point = chargeP in skills.js
   const C = [.5, .5, .56];                        // moment the ice leaves the hand = shot.p in skills.js (keep the same)
   const T = 11, SH = 10.5;                        // thigh + shin length (must match body below)
   const OUT = '#0b1424';
@@ -35,13 +35,35 @@
       tN:[[0,.26],[.35,.35],[.56,.55],[.85,.4],[1,.26]], tF:[[0,-.2],[.35,-.5],[.56,-.6],[.85,-.4],[1,-.2]], Y:[[0,21],[.35,18.5],[.48,18.5],[.56,20.5],[1,21]]
     }
   ];
-  // GLACIAL LANCE THROW (after letting go): hands pull back a little, then both thrust forward. Ice leaves at chargeShot.p (.5).
-  const THROW = {
-    aN:[[CP,1.35],[.44,1.0],[.5,1.6],[.62,1.55],[.85,1.0],[1,.35]], eN:[[CP,.35],[.44,1.2],[.5,.1],[.62,.08],[1,.7]],
-    aF:[[CP,1.25],[.44,.9],[.5,1.55],[.62,1.5],[.85,1.0],[1,.1]],   eF:[[CP,.45],[.44,1.3],[.5,.12],[1,.8]],
-    lean:[[CP,-.05],[.44,-.25],[.5,.32],[.62,.36],[.85,.2],[1,.05]], head:[[CP,0],[.5,.12],[.7,-.15],[1,0]],
-    tN:[[CP,.45],[.5,.6],[1,.26]], tF:[[CP,-.4],[.5,-.65],[1,-.2]], Y:[[CP,19],[.44,18.5],[.5,20.4],[1,21]]
+  // ---- SKILL CASTS. p = 0..1 over the cast. The ice itself (zones, spikes) is drawn by arena.js; here only his body and the frost on his hands. ----
+  const ease = t => t * t * (3 - 2 * t);
+  const GRASP = {   // WINTER'S GRASP (time .5): far hand lifts, near hand raised overhead then SLAMS down toward the ground ahead at p .5
+    aN:[[0,.35],[.3,2.45],[.5,.55],[.8,.6],[1,.35]], eN:[[0,.7],[.3,.35],[.5,.1],[1,.7]],
+    aF:[[0,.1],[.3,1.5],[.6,1.1],[1,.1]], eF:[[0,.8],[.3,1.1],[1,.8]],
+    lean:[[0,.05],[.3,-.12],[.5,.34],[.8,.2],[1,.05]], head:[[0,0],[.3,-.1],[.5,.18],[1,0]],
+    tN:[[0,.26],[.3,.2],[.5,.55],[.85,.4],[1,.26]], tF:[[0,-.2],[.3,-.3],[.5,-.55],[.85,-.35],[1,-.2]], Y:[[0,21],[.3,20.3],[.5,18.4],[1,21]]
   };
+  const COFFIN = {  // CRYSTAL COFFIN (time .45): both hands reach up and out, then close like a clenched fist at p .55
+    aN:[[0,.35],[.3,2.2],[.55,1.4],[.75,1.35],[1,.35]], eN:[[0,.7],[.3,.5],[.55,1.8],[.75,1.7],[1,.7]],
+    aF:[[0,.1],[.3,2.3],[.55,1.25],[.75,1.2],[1,.1]], eF:[[0,.8],[.3,.5],[.55,1.9],[.75,1.8],[1,.8]],
+    lean:[[0,.05],[.3,-.14],[.55,.22],[1,.05]], head:[[0,0],[.3,-.12],[.55,.1],[1,0]],
+    tN:[[0,.26],[.3,.3],[.55,.5],[1,.26]], tF:[[0,-.2],[.3,-.3],[.55,-.5],[1,-.2]], Y:[[0,21],[.3,20],[.55,18.6],[1,21]]
+  };
+  const AGE = {     // ETERNAL ICE AGE (time 3): arms up and out, leaning back while the cold gathers; the last 4% = both arms slam down and the whole arena freezes
+    aN:[[0,.35],[.1,2.6],[.9,2.75],[.96,.9],[1,.35]], eN:[[0,.7],[.1,.3],[.9,.25],[.96,.2],[1,.7]],
+    aF:[[0,.1],[.1,2.7],[.9,2.85],[.96,.8],[1,.1]], eF:[[0,.8],[.1,.3],[.9,.25],[.96,.2],[1,.8]],
+    lean:[[0,.05],[.1,-.28],[.9,-.32],[.96,.3],[1,.05]], head:[[0,0],[.1,-.32],[.9,-.34],[.96,.2],[1,0]],
+    tN:[[0,.26],[.1,.3],[.9,.32],[.96,.5],[1,.26]], tF:[[0,-.2],[.1,-.34],[.9,-.36],[.96,-.5],[1,-.2]], Y:[[0,21],[.1,19.6],[.9,19.4],[.96,19],[1,21]]
+  };
+  // ---- ICE PROJECTILE hold pose. S = f.snipe (arena.js sniperStep): S.kn = 0..1 raise progress, S.ang = aim elevation (+ = up), S.ph = 'aim' | 'recover' (S.rt 0..1 after the throw). ----
+  function aimPose(tg, S){
+    const k = ease(S.kn), th = S.ang, rec = S.ph === 'recover' ? S.rt : 0, thrust = rec > 0 ? Math.sin(Math.min(1, rec / .5) * Math.PI) : 0;   // thrust = the arm whips through after release
+    const aim = {aN:1.5708 + th - .05 - thrust * .35, eN:.12 + thrust * .25, aF:1.25 + th * .25, eF:1.25, lean:.04 + .06 * k + thrust * .22 - th * .05, head:-.04 - th * .22,
+                 tN:.3, tF:-.28};
+    const Y = Math.min(19.4, .97 * (T + SH) * Math.min(Math.cos(aim.tN), Math.cos(aim.tF)));
+    aim.kN = legK(aim.tN, Y); aim.kF = legK(aim.tF, Y);
+    for(const j in aim) tg[j] = tg[j] + (aim[j] - tg[j]) * k;
+  }
 
   // small drawing helpers (local space: origin = feet, x = forward, y = down)
   function poly(cx, pts, fill, stroke, lw){
@@ -59,15 +81,14 @@
            thigh:{len:11, w:5.4}, shin:{len:10.5, w:4.6}, foot:{len:7.5, w:3.4}},
     colors: {shirt:'#3a6ea5', limb:'#4d8fd0', far:'#2b5082', legs:'#2a4a78', legsFar:'#1d3558', head:'#cfe9f5', dark:'#122238', hand:'#bfeaff'},
 
-    // the far arm is drawn on top of the body for cast 2, cast 3 and the lance
-    farFront: f => f.atk > 0 && (((f.A && f.A.step) || 0) >= 1 || (f.A && f.A.chg > 0)),
+    // the far arm is drawn on top of the body for cast 2, cast 3, every skill and the hold
+    farFront: f => !!f.snipe || (f.atk > 0 && f.A && (!!f.A.skill || (f.A.step || 0) >= 1)),
 
     // slow and soft while he gathers (dignified), very stiff at the release (snap), medium after
     spring(p, A){
-      if(A.chg > 0){
-        if(p <= CP + .004) return {k:200, d:28};                       // holding the lance: steady
-        if(A.cl > 0 && p > .4 && p < .62) return {k:470, d:42};        // thrust: snap
-      }
+      if(A.skill === 'sniper') return A.snipe && A.snipe.ph === 'recover' ? {k:430, d:32} : {k:240, d:26};   // steady while aiming, stiff snap at the throw
+      if(A.skill === 'iceage') return p > .93 ? {k:470, d:36} : {k:150, d:22};                               // slow majestic raise, hard slam at the end
+      if(A.skill === 'wintergrasp' || A.skill === 'crystalcoffin') return p > .35 && p < .7 ? {k:460, d:38} : {k:260, d:28};
       const c = C[A.step || 0];
       if(p < c - .1) return {k:130, d:22};
       if(p < c + .1) return {k:440, d:40};
@@ -75,13 +96,8 @@
     },
 
     attack(tg, p, A, K){
-      if(A.chg > 0 && p <= CP + .004){                                  // LANCE HOLD: both hands in front of the chest, leaning back a bit more the longer you hold
-        const L = A.cl || 0;
-        Object.assign(tg, {aN:1.35, eN:.35, aF:1.25, eF:.45, lean:-.05 - .08 * L, head:.02, tN:.45, tF:-.4});
-        const Y = Math.min(19 - 1.2 * L, .97 * (T + SH) * Math.min(Math.cos(tg.tN), Math.cos(tg.tF)));
-        tg.kN = legK(tg.tN, Y); tg.kF = legK(tg.tF, Y); return;
-      }
-      const s = A.chg > 0 && A.cl > 0 ? THROW : STEP[A.step || 0];      // released with enough charge = the lance thrust, else the normal cast
+      if(A.skill === 'sniper' && A.snipe){ aimPose(tg, A.snipe); return; }                                  // HOLD ATK: Ice Projectile
+      const s = A.skill === 'wintergrasp' ? GRASP : A.skill === 'crystalcoffin' ? COFFIN : A.skill === 'iceage' ? AGE : STEP[A.step || 0];
       ['aN', 'eN', 'aF', 'eF', 'lean', 'head', 'tN', 'tF'].forEach(j => tg[j] = K(p, s[j]));
       const Y = Math.min(K(p, s.Y), .97 * (T + SH) * Math.min(Math.cos(tg.tN), Math.cos(tg.tF)));
       tg.kN = legK(tg.tN, Y); tg.kF = legK(tg.tF, Y);
@@ -117,6 +133,7 @@
     front(cx, f, t, S, P){
       // tell arena.js where the hands are in the world, so the ice leaves the real hand
       f.handW = {N:{x:f.x + f.face * S.aN.hand.x, y:f.y + S.aN.hand.y}, F:{x:f.x + f.face * S.aF.hand.x, y:f.y + S.aF.hand.y}};
+      f.handW.S = f.handW.N;                                              // the Ice Projectile leaves the near hand
       const white = f.flash > 0;
 
       // robe: a short front panel hanging from the belt, frost hem
@@ -137,43 +154,52 @@
 
       // head: ice crown + glowing eye (drawn in the head's own tilted space)
       const h = S.head, ang = Math.atan2(h.x - S.sh.x, -(h.y - S.sh.y));
-      const A = f.A || {}, cs = A.chargeShot, L = A.cl || 0;
+      const A = f.A || {}, SN = f.snipe;
       const p = f.atk > 0 ? clamp(1 - f.atk / A.time, 0, 1) : 0;
-      const hold = !!cs && (f.charging || (A.chg > 0 && A.cl > 0 && p < cs.p));
+      const hold = !!SN && SN.ph === 'aim', SK = A.skill;
+      const aura = SK === 'iceage' ? clamp(p / .9, 0, 1) : hold ? (SN.ready ? 1 : .4) : 0;   // the eye + crown glow stronger while a big spell builds
       cx.save(); cx.translate(h.x, h.y); cx.rotate(ang);
       if(!white){
         [[-4.6, -5.4, 4.5, -.18], [-2.3, -5.8, 7.5, -.06], [0, -6, 9.5, 0], [2.3, -5.8, 7.5, .06], [4.6, -5.4, 4.5, .18]].forEach(([x, y, len, a], i) =>
           crystal(cx, x, y, len, 1.7, -Math.PI / 2 + a, i === 2 ? '#ffffff' : '#bfe8ff'));
         cx.fillStyle = '#7fd0ff'; cx.fillRect(-5.4, -6.2, 10.8, 1.5);                                          // crown band
-        cx.shadowColor = '#9fe4ff'; cx.shadowBlur = hold ? 10 + 8 * L : 6;
+        cx.shadowColor = '#9fe4ff'; cx.shadowBlur = 6 + 12 * aura;
         cx.fillStyle = '#e8fbff'; cx.beginPath(); cx.ellipse(3.8, -1.2, 2.3, 1.4, 0, 0, 7); cx.fill();
         cx.shadowBlur = 0; cx.fillStyle = '#35b6ff'; cx.beginPath(); cx.arc(4.3, -1.2, .8, 0, 7); cx.fill();
       }
       cx.restore();
 
-      // ---- casting frost + the lance ----
-      if(f.atk > 0 && A.time){
-        const st = A.step || 0, charged = A.chg > 0 && A.cl > 0 && cs;
-        const hands = st === 0 ? [S.aN.hand] : st === 1 ? [S.aF.hand] : [S.aN.hand, S.aF.hand];
-        if(hold){
-          // GLACIAL LANCE: grows between the hands. Frost motes get pulled in. Full charge = pulsing ring.
-          const lo = A.chargeMin ?? .2, hi = A.chargeMax ?? 1.3, cl = f.chg < lo ? clamp(f.chg / lo, 0, 1) * .15 : L;
-          const mx = (S.aN.hand.x + S.aF.hand.x) / 2, my = (S.aN.hand.y + S.aF.hand.y) / 2, len = 12 + 38 * cl, w = 2.6 + 3 * cl;
-          for(let i = 0; i < 9; i++){
-            const k = (t * 1.6 + i / 9) % 1, a = t * 5 + i * .7, rr = 8 + (1 - k) * 24;
-            cx.fillStyle = 'rgba(210,240,255,' + (.15 + .6 * k) + ')'; cx.beginPath(); cx.arc(mx + len * .3 + Math.cos(a) * rr, my + Math.sin(a) * rr * .7, 1 + k, 0, 7); cx.fill();
-          }
-          const gl = cx.createRadialGradient(mx + len * .3, my, 2, mx + len * .3, my, len * .9 + 8);
-          gl.addColorStop(0, 'rgba(140,220,255,' + (.3 + .3 * cl) + ')'); gl.addColorStop(1, 'rgba(140,220,255,0)');
-          cx.fillStyle = gl; cx.beginPath(); cx.arc(mx + len * .3, my, len * .9 + 8, 0, 7); cx.fill();
-          cx.shadowColor = '#9fe4ff'; cx.shadowBlur = 8 + 10 * cl;
-          poly(cx, [[mx - 5, my], [mx, my - w], [mx + len, my], [mx, my + w]], 'rgba(205,240,255,.95)', '#ffffff', 1.1);    // lance body
-          cx.shadowBlur = 0;
-          poly(cx, [[mx - 3, my], [mx + 2, my - w * .45], [mx + len * .7, my]], 'rgba(255,255,255,.85)');                  // facet highlight
-          if(cl >= 1){ cx.strokeStyle = 'rgba(220,245,255,' + (.4 + .4 * Math.sin(t * 22)) + ')'; cx.lineWidth = 1.2; cx.beginPath(); cx.ellipse(mx + len * .3, my, len * .6 + 3 + Math.sin(t * 22), w + 6, 0, 0, 7); cx.stroke(); }   // FULL: pulsing ring
+      // ---- casting frost, the held shard + aim guide, the Ice Age gathering ----
+      if(hold){
+        // ICE PROJECTILE: a big shard grows in the near palm and points along the aim. Dotted guide = the flight line. READY = pulsing ring + bright guide.
+        const hd = S.aN.hand, th = SN.ang, dx = Math.cos(th), dy = -Math.sin(th), k = clamp(SN.kn, 0, 1), rdy = SN.ready, pu = .5 + .5 * Math.sin(t * 16);
+        const len = 10 + 26 * k, w = 2.4 + 3.2 * k, cxm = hd.x + dx * (len * .55 + 3), cym = hd.y + dy * (len * .55 + 3);
+        cx.save(); cx.strokeStyle = 'rgba(190,240,255,' + (rdy ? .35 + .4 * pu : .22) + ')'; cx.lineWidth = rdy ? 1.6 : 1; cx.setLineDash([3, 6]);
+        cx.beginPath(); cx.moveTo(hd.x + dx * (len + 8), hd.y + dy * (len + 8)); cx.lineTo(hd.x + dx * 230, hd.y + dy * 230); cx.stroke(); cx.setLineDash([]); cx.restore();
+        for(let i = 0; i < 7; i++){ const kk = (t * 1.7 + i / 7) % 1, a = t * 6 + i * .9, rr = 6 + (1 - kk) * 18; cx.fillStyle = 'rgba(210,240,255,' + (.15 + .6 * kk) * k + ')'; cx.beginPath(); cx.arc(cxm + Math.cos(a) * rr, cym + Math.sin(a) * rr * .7, 1 + kk, 0, 7); cx.fill(); }
+        cx.save(); cx.translate(cxm, cym); cx.rotate(Math.atan2(dy, dx));
+        cx.shadowColor = '#9fe4ff'; cx.shadowBlur = 8 + 10 * k;
+        poly(cx, [[-len * .55, 0], [-len * .2, -w], [len * .55, 0], [-len * .2, w]], 'rgba(205,240,255,.96)', '#ffffff', 1.1);
+        cx.shadowBlur = 0; poly(cx, [[-len * .45, 0], [-len * .1, -w * .4], [len * .35, 0]], 'rgba(255,255,255,.85)');
+        crystal(cx, -len * .2, 0, len * .4, w * .35, -.75, 'rgba(190,232,255,.9)'); crystal(cx, -len * .2, 0, len * .4, w * .35, .75, 'rgba(190,232,255,.9)');
+        cx.restore();
+        if(rdy){ cx.strokeStyle = 'rgba(220,245,255,' + (.4 + .4 * pu) + ')'; cx.lineWidth = 1.3; cx.beginPath(); cx.ellipse(cxm, cym, len * .62 + 3 + pu * 2, w + 6, Math.atan2(dy, dx), 0, 7); cx.stroke(); }
+      } else if(SN && SN.ph === 'recover' && SN.rt < .3){                                                   // just thrown: a burst of flakes at the palm
+        const hd = S.aN.hand, k = SN.rt / .3;
+        cx.strokeStyle = 'rgba(220,245,255,' + (1 - k) + ')'; cx.lineWidth = 2 * (1 - k) + .5; cx.beginPath(); cx.arc(hd.x + 6, hd.y, 5 + k * 22, 0, 7); cx.stroke();
+      } else if(f.atk > 0 && A.time){
+        if(SK === 'iceage'){
+          // ETERNAL ICE AGE cast: frost spirals into the space above both hands, a glow and a ring grow with the cast; at the slam (p .96) a flash
+          const k = clamp(p / .94, 0, 1), mx = (S.aN.hand.x + S.aF.hand.x) / 2, my = (S.aN.hand.y + S.aF.hand.y) / 2 - 4;
+          const gl = cx.createRadialGradient(mx, my, 2, mx, my, 14 + 50 * k); gl.addColorStop(0, 'rgba(230,250,255,' + (.35 + .45 * k) + ')'); gl.addColorStop(1, 'rgba(140,220,255,0)');
+          cx.fillStyle = gl; cx.beginPath(); cx.arc(mx, my, 14 + 50 * k, 0, 7); cx.fill();
+          for(let i = 0; i < 14; i++){ const kk = (t * 1.3 + i / 14) % 1, a = t * 4 + i * .9, rr = 10 + (1 - kk) * (24 + 44 * k); cx.fillStyle = 'rgba(220,245,255,' + (.2 + .6 * kk) + ')'; cx.beginPath(); cx.arc(mx + Math.cos(a) * rr, my + Math.sin(a) * rr * .6, 1 + kk * 1.4, 0, 7); cx.fill(); }
+          cx.strokeStyle = 'rgba(200,240,255,' + (.25 + .4 * k) + ')'; cx.lineWidth = 1.5; cx.beginPath(); cx.ellipse(mx, my, 20 + 34 * k, 6 + 10 * k, 0, 0, 7); cx.stroke();
+          if(p > .94){ const q = (p - .94) / .06; cx.fillStyle = 'rgba(240,252,255,' + (.6 * (1 - q)) + ')'; cx.beginPath(); cx.arc(f.face * 0, -26, 30 + q * 70, 0, 7); cx.fill(); }
         } else {
-          const c = charged ? cs.p : C[st], big = st === 2 || charged;
-          const hs = charged ? [S.aN.hand, S.aF.hand] : hands;
+          const st = A.step || 0, both = SK === 'crystalcoffin' || (!SK && st === 2);
+          const hs = SK === 'wintergrasp' ? [S.aN.hand] : both ? [S.aN.hand, S.aF.hand] : st === 1 ? [S.aF.hand] : [S.aN.hand];
+          const c = SK === 'wintergrasp' || SK === 'crystalcoffin' ? .55 : C[st], big = both;
           if(p < c){                                                  // COIL: frost crystals form and spin around each hand
             const k = clamp(p / c, 0, 1);
             hs.forEach(hd => {
@@ -188,27 +214,29 @@
           } else if(p < c + .14){                                     // RELEASE: a quick burst of ice flakes where it left
             const k = (p - c) / .14, hd = hs.length > 1 ? {x:(hs[0].x + hs[1].x) / 2, y:(hs[0].y + hs[1].y) / 2} : hs[0];
             cx.strokeStyle = 'rgba(220,245,255,' + (1 - k) + ')'; cx.lineWidth = 2 * (1 - k) + .5;
-            cx.beginPath(); cx.arc(hd.x + 4, hd.y, 4 + k * (charged ? 30 : big ? 20 : 11), 0, 7); cx.stroke();
+            cx.beginPath(); cx.arc(hd.x + 4, hd.y, 4 + k * (big ? 20 : 11), 0, 7); cx.stroke();
             for(let i = 0; i < 6; i++){ const a = i * 1.05 + .3; cx.fillStyle = 'rgba(230,248,255,' + (1 - k) + ')'; cx.fillRect(hd.x + 4 + Math.cos(a) * (6 + k * 18), hd.y + Math.sin(a) * (6 + k * 18), 2, 2); }
           }
         }
       }
     },
 
-    // the flying ice (arena.js calls this; s = {x, y, r, vx, age, kind, cl}). kind 0/1 = shard, 2 = frost wave, cl > 0 = glacial lance.
+    // the flying ice (arena.js calls this; s = {x, y, r, vx, age, kind, cl}). kind 0/1 = shard, 2 = frost wave, 'sniper' = the big Ice Projectile.
     shot(cx, s, t){
       const d = s.vx > 0 ? 1 : -1, x = s.x, y = s.y;
       cx.save(); cx.translate(x, y); cx.scale(d, 1); cx.translate(-x, -y);   // draw everything as if flying right
-      if(s.cl > 0){                                                          // GLACIAL LANCE: long faceted spear + cold trail
-        const len = 46 + 34 * s.cl, w = 3.4 + s.r * .28;
-        const g = cx.createLinearGradient(x, y, x - 130, y);
+      if(s.kind === 'sniper'){                                               // ICE PROJECTILE: a big faceted shard, rotated along its real flight line, with a cold trail + sparkles
+        const a = Math.atan2(s.vy || 0, Math.abs(s.vx)), L = 30 + s.r * 1.6, w = 4 + s.r * .7;
+        cx.translate(x, y); cx.rotate(a); cx.translate(-x, -y);
+        const g = cx.createLinearGradient(x, y, x - 150, y);
         g.addColorStop(0, 'rgba(150,225,255,.6)'); g.addColorStop(1, 'rgba(150,225,255,0)');
-        cx.fillStyle = g; cx.beginPath(); cx.moveTo(x, y - w * 1.3); cx.lineTo(x - 130, y); cx.lineTo(x, y + w * 1.3); cx.closePath(); cx.fill();
-        cx.shadowColor = '#9fe4ff'; cx.shadowBlur = 14 + 8 * s.cl;
-        poly(cx, [[x - len * .55, y], [x - len * .3, y - w], [x + len * .5, y], [x - len * .3, y + w]], 'rgba(210,242,255,.97)', '#ffffff', 1.2);
+        cx.fillStyle = g; cx.beginPath(); cx.moveTo(x, y - w * 1.3); cx.lineTo(x - 150, y); cx.lineTo(x, y + w * 1.3); cx.closePath(); cx.fill();
+        cx.shadowColor = '#9fe4ff'; cx.shadowBlur = 16;
+        crystal(cx, x - L * .3, y, L * .55, w * .45, -.55, 'rgba(190,232,255,.95)'); crystal(cx, x - L * .3, y, L * .55, w * .45, .55, 'rgba(190,232,255,.95)');
+        poly(cx, [[x - L * .6, y], [x - L * .3, y - w], [x + L * .6, y], [x - L * .3, y + w]], 'rgba(212,244,255,.98)', '#ffffff', 1.3);
         cx.shadowBlur = 0;
-        poly(cx, [[x - len * .45, y], [x - len * .2, y - w * .4], [x + len * .35, y]], 'rgba(255,255,255,.9)');
-        for(let i = 0; i < 5; i++){ const k = (s.age * 3 + i * .2) % 1; cx.fillStyle = 'rgba(225,246,255,' + (1 - k) + ')'; cx.fillRect(x - len * .5 - k * 50, y + Math.sin(i * 2.1 + s.age * 9) * w * 1.6, 2, 2); }
+        poly(cx, [[x - L * .5, y], [x - L * .2, y - w * .4], [x + L * .4, y]], 'rgba(255,255,255,.92)');
+        for(let i = 0; i < 6; i++){ const k = (s.age * 3 + i * .17) % 1; cx.fillStyle = 'rgba(225,246,255,' + (1 - k) + ')'; cx.fillRect(x - L * .5 - k * 60, y + Math.sin(i * 2.1 + s.age * 9) * w * 1.7, 2, 2); }
         cx.restore(); return;
       }
       if(s.kind === 2){                                                      // FROST WAVE: a fan of jagged crystals with a wide cold tail

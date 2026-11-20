@@ -403,6 +403,13 @@
 
     // Attack pose solver
     attack(tg, p, A, K){
+      if(A.skill === 'skyfall' || A.skill === 'stormofruin'){   // calling lightning: both blades raised to the sky and held
+        const up = (a, b) => K(p, [[0, a], [.3, b], [1, b]]);
+        tg.aN = up(G0.aN, 2.6); tg.eN = up(G0.eN, .55); tg.aF = up(G0.aF, 2.45); tg.eF = up(G0.eF, .7);
+        tg.lean = up(G0.lean, -.14); tg.head = up(0, .25);
+        tg.tN = G0.tN; tg.kN = G0.kN; tg.tF = G0.tF; tg.kF = G0.kF;
+        return;
+      }
       const step = A.step || 0;
       const H = COMBO[step] || COMBO[0];
       const lead = H.lead, off = lead === 'N' ? 'F' : 'N';

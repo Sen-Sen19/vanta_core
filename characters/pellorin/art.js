@@ -62,12 +62,15 @@
       P.hit = true;
       const b = SK().beast, bf = clamp((P.sc - 1) / (b.scale - 1), 0, 1);
       const A2 = (bf > .05 && !P.rel) ? {...A, dmg:A.dmg * (1 + (b.dmg - 1) * bf), kbx:(A.kbx ?? 1) * (1 + .15 * bf), noShake:true, hitstop:(A.hitstop || 0) + .04 * bf} : {...A, noShake:true};
-      hurt(o, {c:f.c, A:A2, face:o.x >= P.x ? 1 : -1});
+      const PB = Characters.skillsOf('pellorin').passive;
+      if(f.mbT > 0 && PB) A2.dmg *= 1 + PB.atk;                         // Performance buff (passive): the puppet hits harder
+      hurt(o, {c:f.c, A:A2, face:o.x >= P.x ? 1 : -1, src:f});          // src = him: the hit counts for his passive
     }
   }
 
   // one step of the puppet: start / end of a swing, focus, beast timer, walking / hopping, leash, hit check, and the pose numbers for drawing
   function tick(f){
+    if(f.fc) return tickBeast(f);
     const P = f.pup || init(f), SKB = SK(), St = SKB.string, bc = SKB.beast, o = foeOf(f), an = P.an;
     const dt = clamp(G.t - P.t, 0, .05); P.t = G.t;
     if(f.gr){ const pl = G.P.find(q => Math.abs(q.y - f.y) < 3 && f.x > q.x - 6 && f.x < q.x + q.w + 6); if(pl) P.tp = pl; }   // tp = the platform HE stands on (where the puppet should be)
@@ -85,7 +88,7 @@
     const aim = () => (Math.abs(o.y - P.plat.y) < 90 && Math.abs(o.x - f.x) < leash + 50) ? (o.x >= P.x ? 1 : -1) : f.face;
 
     const rising = f.atk > P.lastAtk + 1e-4; P.lastAtk = f.atk;
-    if(f.stun > 0 || f.atk <= 0){ if(P.mode === 'atk') P.mode = 'follow'; P.focus = false; }
+    if(f.stun > 0 || f.atk <= 0 || !A.pup){ if(P.mode === 'atk') P.mode = 'follow'; P.focus = false; }   // (also when a SKILL cancelled the swing: its attack has no puppet move)
     else if(rising && A.pup){                                         // a new swing starts: the puppet starts its move
       Object.assign(P, {mode:'atk', step:A.step || 0, dir:aim(), hit:false, fx:false, dashSet:false, rel:false, focus:false, cl:0, xs:P.x, xe:P.x});
     }
@@ -163,7 +166,7 @@
       want = clamp(want, f.x - leash * .95, f.x + leash * .95);
       want = clamp(want, P.tp.x + 8, P.tp.x + P.tp.w - 8);
       const over = !(P.x > P.plat.x - 2 && P.x < P.plat.x + P.plat.w + 2);
-      if(!P.hop && (P.plat !== P.tp || over)) startHop(P, P.tp, want);
+      if(!P.hop && (P.plat !== P.tp || over || Math.abs(P.x - f.x) > leash + 6)) startHop(P, P.tp, want);   // (also hops back to him when it was thrown farther than the string reaches: Grand Entrance)
       if(P.hop){                                                     // dangling in the air on the strings
         P.dir = Math.sign(P.hop.x1 - P.hop.x0) || P.dir;
         Object.assign(an, {armF:2.3 + Math.sin(G.t * 9) * .2, armB:-2.3 - Math.sin(G.t * 9) * .2, bend:.3, legF:.3 + Math.sin(G.t * 10) * .2, legB:-.3 - Math.sin(G.t * 10) * .2, head:.1});
@@ -184,6 +187,20 @@
       }
     }
 
+    if(f.ge){                                                          // THE GRAND ENTRANCE: crouch, leap along the arc, stomp
+      const ge = f.ge;
+      if(ge.ph === 'wind'){ const k = clamp(ge.t / ge.d.wind, 0, 1); Object.assign(an, {crouch:2.4 * k, lean:-.1 * k, armF:2.2, armB:2.0, bend:.3, legF:.6 * k, legB:-.6 * k}); }
+      else{
+        P.hop = null; P.vx = 0; P.dir = ge.dir;
+        if(ge.ph === 'fly'){ const k = clamp(ge.t / ge.d.fly, 0, 1); Object.assign(an, {armF:2.6, armB:2.5, bend:.2, legF:.9 - .5 * k, legB:.5 - .9 * k, lean:.05 + .3 * k, crouch:0}); }
+        else{ const k = clamp(1 - ge.t / ge.d.recover * 1.6, 0, 1); Object.assign(an, {armF:.7, armB:.5, bend:.5, legF:.9, legB:-.9, lean:.3 * k, crouch:2.6 * k}); }
+      }
+    }
+    if(f.ns && !P.hop){                                              // NO STRINGS DETACHED: the puppet plants itself and aims the string
+      const ns = f.ns, k = clamp(ns.t / ns.d.wind, 0, 1), a = Math.atan2(ns.dx * (ns.dx >= 0 ? 1 : -1), -ns.dy);   // elevation of the aim
+      P.x = ns.px; P.vx = 0; P.dir = ns.dx >= 0 ? 1 : -1; P.mode = P.mode === 'atk' ? 'follow' : P.mode;
+      Object.assign(an, {armF:1.57 - Math.atan2(ns.dy, Math.abs(ns.dx)) * 1, armB:-.8, bend:0, lean:.3 * k, legF:.7 * k, legB:-.6 * k, crouch:1.2 * k, head:-.05, weapon:0, lift:0, sx:1});
+    }
     // size: grows slowly while he focuses (the longer he holds, the bigger and more monster), stays at that size for the beast time, shrinks back in the last half second
     let tg = 1;
     if(G.t < P.beastUntil){ const left = P.beastUntil - G.t; tg = left < .5 ? lerp(1, P.bsc, left / .5) : P.bsc; }
@@ -197,7 +214,64 @@
     }
     P.air += (((!P.hop && !onPlat(P.plat.y, P.x)) ? 14 : 0) - P.air) * Math.min(1, dt * 12);
     an.lift += P.air;
+    if(f.ge && f.ge.ph !== 'wind'){                                  // THE GRAND ENTRANCE: the leap is driven by arena.js (f.ge.x / f.ge.y = where the puppet's feet are)
+      const ge = f.ge;
+      if(ge.ph === 'rec'){ const pl = G.P.find(q => Math.abs(q.y - ge.gy) < 3 && ge.tx > q.x - 6 && ge.tx < q.x + q.w + 6); if(pl){ P.plat = pl; P.y = pl.y; } P.air = 0; an.lift = 0; }
+      else an.lift = P.y - ge.y;
+      P.x = ge.x;
+    }
     return P;
+  }
+
+  // ---- THE FINAL CURTAIN: the puppet IS the monster body (arena.js moves it and fights with it: f.x / f.y = its feet). This only sets its size, pose and look. ----
+  function tickBeast(f){
+    const P = f.pup || init(f), bc = SK().beast, an = P.an, A = f.A || {}, now = G.t;
+    const dt = clamp(now - P.t, 0, .05); P.t = now;
+    if(f.gr){ const pl = G.P.find(q => Math.abs(q.y - f.y) < 3 && f.x > q.x - 6 && f.x < q.x + q.w + 6); if(pl) P.plat = pl; }
+    Object.assign(P, {x:f.x, y:f.y, dir:f.face, mode:'fc', hop:null, air:0, focus:false, rel:false, vx:f.vx, beastUntil:0});
+    P.sc += (bc.scale - P.sc) * Math.min(1, dt * 6);                  // swells into the full monster (the look morphs in with the size)
+    Object.assign(an, {legF:0, legB:0, armF:0, armB:0, bend:.4, lean:0, head:0, crouch:0, lift:0, sx:1, weapon:0, spin:0});
+    const swing = f.atk > 0 && f.stun <= 0 && !!A.time, p = swing ? clamp(1 - f.atk / A.time, 0, 1) : 0, st = A.step || 0;
+    if(!swing) P.fx = false;
+    if(f.stun > 0){                                                   // hit: the monster flops back
+      Object.assign(an, {armF:1.3 + Math.sin(now * 30) * .5, armB:-1.3 - Math.sin(now * 30) * .5, head:Math.sin(now * 25) * .4, legF:.3, legB:-.3, lean:-.25});
+    }else if(swing){
+      const both = ks => { an.armF = K(p, ks); an.armB = K(p, ks) - .15; };
+      if(st === 0){                                                   // LEAPING STOMP: crouch, jump with the arms up, land feet first
+        both([[0,.3],[.28,2.5],[.6,2.6],[.78,.7],[1,.3]]); an.crouch = 2.4 * K(p, [[0,0],[.2,1],[.3,0],[1,0]]);
+        an.legF = K(p, [[0,0],[.25,.5],[.45,1.1],[.72,.15],[1,.2]]); an.legB = K(p, [[0,0],[.25,-.4],[.45,.6],[.72,-.15],[1,-.2]]); an.lean = K(p, [[0,0],[.28,-.15],[.6,-.1],[.78,.35],[1,.1]]); an.bend = .25;
+      }else if(st === 1){                                             // DOUBLE-HANDED SMASH: both fists up, then down together
+        both([[0,.3],[.3,2.7],[.52,2.8],[.64,.5],[1,.3]]); an.lean = K(p, [[0,0],[.3,-.22],[.52,-.25],[.64,.4],[1,.1]]); an.crouch = 2.2 * K(p, [[0,0],[.5,0],[.66,1],[1,0]]);
+        an.legF = .5; an.legB = -.5; an.bend = .2;
+      }else if(st === 2 || st === 3){                                 // LEFT / RIGHT PUNCH: back arm, then front arm
+        const hit = K(p, [[0,-.6],[.25,-1.1],[.48,1.55],[.72,1.5],[1,-.3]]), guard = K(p, [[0,.3],[.3,1.0],[1,.4]]);
+        if(st === 2){ an.armB = hit; an.armF = guard; } else { an.armF = hit; an.armB = -guard; }
+        an.bend = K(p, [[0,.4],[.25,.8],[.48,0],[.72,0],[1,.4]]); an.lean = K(p, [[0,0],[.25,-.15],[.48,.4],[.72,.35],[1,.1]]);
+        an.legF = K(p, [[0,0],[.4,.8],[.8,.6],[1,0]]); an.legB = K(p, [[0,0],[.4,-.7],[.8,-.5],[1,0]]); an.crouch = 1.2 * K(p, [[0,0],[.5,1],[1,0]]);
+      }else{                                                          // LEAPING SMASH: big crouch, high leap, both fists slammed down on landing
+        both([[0,.3],[.3,2.8],[.62,2.9],[.78,.3],[1,.3]]); an.crouch = 3 * K(p, [[0,0],[.25,1],[.33,0],[1,0]]);
+        an.legF = K(p, [[0,0],[.3,.5],[.5,1.2],[.78,.1],[1,.2]]); an.legB = K(p, [[0,0],[.3,-.4],[.5,.7],[.78,-.2],[1,-.2]]); an.lean = K(p, [[0,0],[.3,-.2],[.62,-.2],[.78,.5],[1,.1]]); an.bend = .2;
+      }
+      if((st === 0 || st === 4) && !P.fx && p >= .72){                // landing dust
+        P.fx = true; G.rings.push({x:f.x + f.face * 12, y:f.y - 3, life:.25});
+        for(let i = 0; i < 12; i++) G.parts.push({x:f.x + f.face * 12, y:f.y - 2, vx:(Math.random() - .5) * 480, vy:-Math.random() * 280, life:.4, col:'#d9b38c'});
+      }
+    }else if(!f.gr){                                                  // in the air: arms up, legs tucked
+      Object.assign(an, {armF:2.2, armB:-2.0, bend:.3, legF:.6, legB:-.3, lean:.05});
+    }else{
+      P.ph += dt * Math.abs(f.vx) * .05; const s = Math.sin(P.ph);
+      if(Math.abs(f.vx) > 25){ an.legF = s * .6; an.legB = -s * .6; an.armF = -s * .5 + .3; an.armB = s * .5 - .2; an.lean = .12; an.crouch = Math.abs(s) * .8; }
+      else { an.armF = .35 + Math.sin(now * 2) * .06; an.armB = -.25 - Math.sin(now * 2) * .06; an.lean = .06; an.crouch = .4 + Math.sin(now * 2) * .3; }   // idle: heavy breathing
+    }
+    return P;
+  }
+
+  // his dance in the air (the ragdoll's own joint targets, see body.js). Continuous: conductor arms swapping high / low, a trailing ballet leg, a swaying head.
+  function dance(tg){
+    const w = G.t * 2.4, s = Math.sin(w), c = Math.cos(w), lg = Math.sin(w * .5), hi = .5 + .5 * s;
+    Object.assign(tg, {lean:.1 + .16 * c, head:-.12 + .14 * Math.sin(w + 1),
+      aN:lerp(.9, 2.7, hi), eN:.35 + .3 * (1 - hi), aF:lerp(2.6, .8, hi), eF:.35 + .3 * hi,
+      tN:.2 + .5 * lg, kN:.5 - .3 * lg, tF:-.35 - .5 * lg, kF:.25 + .35 * (1 - lg)});
   }
 
   // ---- drawing helpers (local space of the puppet: origin = feet, x = forward, y = down) ----
@@ -232,14 +306,42 @@
     const wood = mixc('#e7c79b', '#a98f63', m1), coat = mixc('#c23b5b', '#5b2a6e', m1), dark = mixc('#2a1020', '#3a2a1c', m1);
     const wA = 2.4 + 2 * m1, wL = 2.8 + 2.2 * m1, wT = 6 + 4 * m1;
 
+    if(f.ge && f.ge.ph !== 'rec'){                                                                    // THE GRAND ENTRANCE: warning ring on the ground where the puppet will land (it tightens as it comes down)
+      const ge = f.ge, k = ge.ph === 'wind' ? 0 : clamp(ge.t / ge.d.fly, 0, 1), rr = ge.d.radius * (1.08 - .08 * k), pu = .6 + .4 * Math.sin(t * (12 + 14 * k));
+      cx.save(); cx.strokeStyle = 'rgba(255,212,121,' + (.55 + .4 * pu) + ')'; cx.fillStyle = 'rgba(194,59,91,' + (.16 + .14 * k) * pu + ')'; cx.lineWidth = 2.2; cx.setLineDash([7, 5]);
+      cx.beginPath(); cx.ellipse(ge.tx, ge.gy - 2, rr, rr * .26, 0, 0, 7); cx.fill(); cx.stroke(); cx.restore();
+    }
     // strings: three lines from his hand to the puppet head and both hands. They turn into twisted rope as the puppet gets big.
     const top = toW({x:sk.head.x, y:sk.head.y - hr - 1}), hl = toW(sk.aF.h), hr2 = toW(sk.aB.h);
+    const NSK = f.ns, con = f.fc ? 0 : NSK ? NSK.con : 1;                                                         // No Strings Detached: 0 = string cut from his hand, 1 = connected
     const dist = Math.hypot(top.x - hand.x, top.y - hand.y), slack = focus ? .5 : clamp((1 - dist / (SK().string.leash * 1.1)) * 30, 1, 26);
     const rope = m2 > .3, c1 = rope ? 'rgba(216,201,168,.95)' : 'rgba(255,230,160,.9)', c2 = rope ? 'rgba(216,201,168,.65)' : 'rgba(255,230,160,.55)';
     cx.save(); cx.lineCap = 'round';
     if(rope) cx.setLineDash([3.2, 1.6]);
-    string(cx, hand, top, slack, c1, 1.1 + 1.4 * m1);
-    string(cx, hand, hl, slack * 1.2, c2, .8 + .6 * m1); string(cx, handF, hr2, slack * 1.2, c2, .8 + .6 * m1);
+    const toward = (a, b) => ({x:a.x + (b.x - a.x) * con, y:a.y + (b.y - a.y) * con});               // a string that is still reconnecting only reaches part of the way
+    if(con > .02){
+      string(cx, hand, toward(hand, top), slack * con, c1, 1.1 + 1.4 * m1);
+      string(cx, hand, toward(hand, hl), slack * 1.2 * con, c2, .8 + .6 * m1); string(cx, handF, toward(handF, hr2), slack * 1.2 * con, c2, .8 + .6 * m1);
+    }
+    if(NSK && con < 1){                                                                                // cut ends: a short limp string hangs from his hand, a short stub stays on the puppet
+      const sw = Math.sin(t * 7) * 2;
+      cx.strokeStyle = c1; cx.lineWidth = 1.1; cx.beginPath(); cx.moveTo(hand.x, hand.y); cx.quadraticCurveTo(hand.x + sw, hand.y + 8, hand.x + sw * 1.5, hand.y + 15); cx.stroke();
+      if(NSK.ph !== 'wind'){                                                                           // THE LAUNCHED STRING: from the puppet's hand along the aim, a sharp bright tip, trailing back to the puppet
+        const ox = NSK.px, oy = NSK.py;
+        cx.save(); cx.lineCap = 'round'; cx.shadowColor = '#ffd479'; cx.shadowBlur = 7;
+        NSK.ang.forEach((sg, i) => {                                                                     // one string per finger: 10 needles fanned out from the puppet
+          const a = sg.a, ln = Math.min(NSK.tip, NSK.d.range * sg.L), ux = Math.cos(a), uy = Math.sin(a), tx = ox + ux * ln, ty = oy + uy * ln, wob = NSK.ph === 'out' ? 0 : Math.sin(t * 40 + i) * 1.1;
+          cx.strokeStyle = 'rgba(255,236,170,.95)'; cx.lineWidth = 1.2; cx.beginPath(); cx.moveTo(ox, oy); cx.lineTo(tx - uy * wob, ty + ux * wob); cx.stroke();
+          cx.fillStyle = '#fff6d6'; cx.beginPath(); cx.moveTo(tx + ux * 6, ty + uy * 6); cx.lineTo(tx - uy * 1.8, ty + ux * 1.8); cx.lineTo(tx - ux * 1.6, ty - uy * 1.6); cx.lineTo(tx + uy * 1.8, ty - ux * 1.8); cx.closePath(); cx.fill();   // needle tip
+        });
+        cx.restore();
+      }
+    }
+    if(f.fc){                                                                                          // THE FINAL CURTAIN: the strings are cut from his hands. Loose ends dangle from his fingers, the monster's strings float up, free
+      cx.setLineDash([]); cx.lineCap = 'round';
+      [hand, handF].forEach((hd, i) => { const sw = Math.sin(t * 2.6 + i * 1.9) * 4; cx.strokeStyle = 'rgba(255,230,160,.8)'; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(hd.x, hd.y); cx.bezierCurveTo(hd.x + sw, hd.y + 8, hd.x - sw, hd.y + 18, hd.x + sw * 1.4, hd.y + 28); cx.stroke(); });
+      [top, hl, hr2].forEach((a, i) => { const L = 26 + 10 * i, sw = Math.sin(t * 2.2 + i * 2.1); cx.strokeStyle = 'rgba(216,201,168,.6)'; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(a.x, a.y); cx.bezierCurveTo(a.x + sw * 6, a.y - L * .35, a.x - sw * 6, a.y - L * .7, a.x + sw * 3, a.y - L); cx.stroke(); });
+    }
     cx.restore();
     [hand, handF].forEach(hd => {                                                                      // gold ring on each hand where the strings start
       cx.fillStyle = OUT; cx.beginPath(); cx.arc(hd.x, hd.y, 3.1, 0, 7); cx.fill();
@@ -255,6 +357,19 @@
       const r = (14 + 4 * Math.sin(t * 12)) * sc * (focus ? .8 : 1), g = cx.createRadialGradient(P.x, P.y - 10 * sc, 2, P.x, P.y - 10 * sc, r);
       g.addColorStop(0, bf > .15 ? 'rgba(150,70,210,' + (.15 + .3 * m3) + ')' : 'rgba(255,170,90,' + (.2 + .2 * P.cl) + ')'); g.addColorStop(1, 'rgba(150,70,210,0)');
       cx.fillStyle = g; cx.beginPath(); cx.arc(P.x, P.y - 10 * sc, r, 0, 7); cx.fill();
+    }
+    if(f.mbT > 0){                                                                                       // PERFORMANCE BUFF: golden spotlight + rising sparkles around the puppet
+      const pu = .5 + .5 * Math.sin(t * 9), r = (17 + 3 * pu) * sc, g = cx.createRadialGradient(P.x, P.y - 10 * sc, 2, P.x, P.y - 10 * sc, r);
+      g.addColorStop(0, 'rgba(255,214,120,' + (.3 + .15 * pu) + ')'); g.addColorStop(1, 'rgba(255,214,120,0)'); cx.fillStyle = g; cx.beginPath(); cx.arc(P.x, P.y - 10 * sc, r, 0, 7); cx.fill();
+      for(let i = 0; i < 5; i++){ const k = (t * .9 + i / 5) % 1; cx.fillStyle = 'rgba(255,236,170,' + (1 - k) + ')'; cx.fillRect(P.x + Math.sin(i * 2.3 + t) * 9 * sc, P.y - 4 * sc - k * 26 * sc, 1.6, 1.6); }
+    }
+    if(focus){                                                                                           // charge meter over the puppet: 4 tiers (25 / 50 / 75 / 100 %), the % grows as you hold
+      const cl = P.cl, bw = 30, bx = P.x - bw / 2, by = P.y - an.lift - 34 * sc - 9, full = cl >= 1, pu = .5 + .5 * Math.sin(t * 20);
+      cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillRect(bx - 1, by - 1, bw + 2, 6);
+      cx.fillStyle = full ? 'rgba(255,240,190,' + (.7 + .3 * pu) + ')' : '#ff9a3a'; cx.fillRect(bx, by, bw * cl, 4);
+      cx.fillStyle = 'rgba(0,0,0,.7)'; [.25, .5, .75].forEach(q => cx.fillRect(bx + bw * q - .4, by, .8, 4));
+      cx.save(); cx.textAlign = 'center'; cx.font = '700 7px system-ui'; cx.lineWidth = 2; cx.strokeStyle = '#000'; cx.fillStyle = full ? '#fff2c4' : '#ffd1a0';
+      const txt = full ? 'MAX' : Math.round(cl * 100) + '%'; cx.strokeText(txt, P.x, by - 2); cx.fillText(txt, P.x, by - 2); cx.restore();
     }
     if(focus){                                                                                           // sparks pulled into the puppet
       for(let i = 0; i < 8; i++){ const k = (t * 1.4 + i / 8) % 1, a = t * 6 + i * .8, rr = (6 + (1 - k) * 22) * sc * .8;
@@ -337,14 +452,45 @@
     body: {head:{r:6.3}, torso:{len:12.5, w:10.5}, uArm:{len:9.5, w:4.2}, fArm:{len:9.5, w:3.8}, hand:{r:2.9}, shN:1, shF:-3.5, thigh:{len:10.5, w:5.4}, shin:{len:10, w:4.6}, foot:{len:7.5, w:3.4}},
     colors: {shirt:'#b8324f', limb:'#d9486a', far:'#7e2036', legs:'#2a1830', legsFar:'#1c1022', head:'#f0d9c8', dark:'#2a1020', hand:'#f2e6d8'},
 
-    spring(p, A){ if(A.chg > 0 && p <= CP + .004) return {k:200, d:20}; },
+    // THE FINAL CURTAIN (arena.js drawF calls this INSTEAD of the ragdoll while f.fc is on): the floating dancer (a separate ragdoll, f.fc.ghost) + the monster body + the bars.
+    fcDraw(cx, f, t){
+      const S = f.fc, g = S.ghost, d = S.d, k = clamp(S.t / d.rise, 0, 1), e = k * k * (3 - 2 * k);
+      g.x = lerp(S.x0, S.px, e); g.y = lerp(S.y0, S.py, e) + Math.sin(t * 2.1) * 4 * e; g.face = Math.sign(f.x - g.x) || g.face; g.vx = 70 * e; g.atk = .5; g.gr = false;
+      cx.save();
+      cx.fillStyle = 'rgba(0,0,0,' + clamp(.32 - (S.gy - g.y) / 700, .1, .3) + ')'; cx.beginPath(); cx.ellipse(g.x, S.gy + .5, 14, 3.4, 0, 0, 7); cx.fill();   // his shadow far below
+      const gl = cx.createRadialGradient(g.x, g.y - 26, 4, g.x, g.y - 26, 50); gl.addColorStop(0, 'rgba(255,212,121,.24)'); gl.addColorStop(1, 'rgba(255,212,121,0)');   // stage light on him
+      cx.fillStyle = gl; cx.beginPath(); cx.arc(g.x, g.y - 26, 50, 0, 7); cx.fill();
+      const cyc = t % 3, tw = cyc < 1 ? cyc : 0, cs = Math.cos(tw * 2 * Math.PI), sxw = (cs < 0 ? -1 : 1) * Math.max(.2, Math.abs(cs));   // a pirouette every 3 s
+      cx.globalAlpha = 1; cx.translate(g.x, g.y - 28); cx.rotate(Math.sin(t * 1.7) * .1); cx.scale(sxw, 1); cx.translate(-g.x, -(g.y - 28));
+      Body.draw(cx, g, t);
+      cx.restore();
+      const hd = g.handW || {N:{x:g.x, y:g.y - 30}, F:{x:g.x, y:g.y - 30}};
+      tick(f); cx.save(); drawWorld(cx, f, hd.N, t, hd.F); cx.restore();                     // the monster
+      const bw = 46, bx = f.x - bw / 2, by = f.y - f.h - 40, hr = clamp(S.hp / S.max, 0, 1), tr = clamp(1 - S.t / d.duration, 0, 1);   // its HP + time left
+      cx.save(); cx.globalAlpha = 1;
+      cx.fillStyle = 'rgba(0,0,0,.6)'; cx.fillRect(bx - 1, by - 1, bw + 2, 10);
+      cx.fillStyle = hr > .5 ? '#c07bff' : hr > .25 ? '#f5c542' : '#ff4d5e'; cx.fillRect(bx, by, bw * hr, 5);
+      cx.fillStyle = GOLD; cx.fillRect(bx, by + 6, bw * tr, 2);
+      cx.restore();
+    },
+
+    spring(p, A){ if(A.dance) return {k:60, d:9}; if(A.chg > 0 && p <= CP + .004) return {k:200, d:20}; },
 
     // his near hand works like a puppeteer: lifts, flicks, twirls, yanks down. Legs keep the normal walk / idle pose.
     attack(tg, p, A, Kf){
+      if(A.dance){ dance(tg); return; }                              // THE FINAL CURTAIN: the floating dancer
       const L = A.cl || 0;
       if(A.chg > 0 && p <= CP + .004){                               // FOCUS: hand up high and shaking, leaning back a bit
         Object.assign(tg, {aN:2.55 + Math.sin(A.chg * 38) * .05 * (1 + L), eN:.35, lean:-.1 - .06 * L, head:-.12, aF:2.35 + Math.sin(A.chg * 38 + 1.6) * .05 * (1 + L), eF:.4});   // BOTH hands up, shaking
         return;
+      }
+      if(A.skill === 'grandentrance'){                               // THE GRAND ENTRANCE: both hands rise like a conductor, sweep out toward the spot, then yank down together at the stomp
+        Object.assign(tg, {aN:Kf(p, [[0,.6],[.12,2.5],[.3,2.6],[.4,1.4],[.62,1.4],[.72,.5],[1,.6]]), eN:Kf(p, [[0,.5],[.12,.3],[.3,.3],[.4,.2],[.72,.2],[1,.5]]),
+          aF:Kf(p, [[0,-.1],[.12,2.3],[.3,2.4],[.4,1.3],[.62,1.3],[.72,.4],[1,-.1]]), eF:Kf(p, [[0,.5],[.3,.3],[1,.5]]), lean:Kf(p, [[0,.05],[.12,-.15],[.3,-.18],[.4,.15],[.72,.3],[1,.05]])}); tg.head = -tg.lean * .4; return;
+      }
+      if(A.skill === 'nostrings'){                                   // NO STRINGS DETACHED: hand snaps back (cutting the string), then points the way the string flies, then reaches out again to reconnect
+        Object.assign(tg, {aN:Kf(p, [[0,.6],[.08,1.2],[.14,.7],[.25,1.7],[.7,1.7],[.85,1.2],[1,.6]]), eN:Kf(p, [[0,.5],[.08,1.3],[.14,1.2],[.25,.3],[.7,.3],[1,.5]]),
+          aF:Kf(p, [[0,-.1],[.14,.4],[.3,.2],[1,-.1]]), eF:.5, lean:Kf(p, [[0,.05],[.14,-.1],[.25,.18],[.75,.15],[1,.05]])}); tg.head = -tg.lean * .4; return;
       }
       const rel = A.chg > 0 && L > 0, s = ARM[rel ? 2 : (A.step || 0)];
       tg.aN = Kf(p, s.aN); tg.eN = Kf(p, s.eN); tg.aF = Kf(p, s.aF); tg.eF = Kf(p, s.eF); tg.lean = Kf(p, s.lean); tg.head = -tg.lean * .4;

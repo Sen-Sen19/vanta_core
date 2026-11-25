@@ -1,4 +1,5 @@
-// AFTERTASTE art - The Flavor of Violence. RAGDOLL ONLY (weapons + real attacks come later).
+// AFTERTASTE art - The Flavor of Violence. Pudge-like grotesque human butcher (bald, bulbous nose, sunken eyes, filthy patched apron). RAGDOLL + weapons.
+// Design pass: face (front()), aged skin + belly folds (torso()), patched apron + waist rope under the belly (torso()), bare legs + leather boots (foot()).
 // Massive, slow, hunched butcher: huge barrel belly, buried neck, small head, broad rounded shoulders, thick forearms, big butcher hands,
 // short very thick legs, wide boots, dirty bloodstained apron with the belly hanging out under it.
 // Hooks: body (sizes), colors, torso() (barrel belly + hump + apron), pose() (heavy idle / waddle / landing), attack() (placeholder chop),
@@ -14,20 +15,20 @@
     torso: {len: 12, w: 16},            // w only sets the neck height: head sits low / "buried" in the shoulders
     uArm:  {len: 9.5, w: 7.4},          // 1.6x thick
     fArm:  {len: 9.5, w: 6.7},
-    hand:  {r: 5.2},                    // big rough butcher hands
-    thigh: {len: 8.5, w: 10.2},         // shorter, 1.7x thick
-    shin:  {len: 8.5, w: 8.5},
-    foot:  {len: 11, w: 6.2},           // wide heavy boots
+    hand:  {r: 4.3},                    // normal-sized hands: short thick fingers, rough skin
+    thigh: {len: 8.5, w: 9},         // shorter, 1.7x thick
+    shin:  {len: 8.5, w: 7.4},
+    foot:  {len: 10, w: 5.6},           // wide heavy boots
     headSink: 4,                        // head sunk into the shoulders
     shN: 1, shF: -5,                    // wide body: far shoulder sits well behind the near one (default gap is only 2px)
-    belt: 7
+    belt: 5.5
   };
   const BODY = {};
   for(const k in BODY0) BODY[k] = typeof BODY0[k] === 'object' ? Object.fromEntries(Object.entries(BODY0[k]).map(([j, v]) => [j, +(v * SZ).toFixed(2)])) : +(BODY0[k] * SZ).toFixed(2);
 
   // ---------- poses ----------
   // legs: both feet reach the same ground height (thigh/shin 8.5 each)
-  const STAND = {tN: .40, kN: .34, tF: -.28, kF: .02};
+  const STAND = {tN: .26, kN: .2, tF: -.22, kF: .04};
 
   // ---------- secondary motion: belly + apron flap are little springs that lag behind the body ----------
   // ox = belly forward/back offset (px), oy = belly up/down offset (px). Positive oy = sags down.
@@ -74,6 +75,57 @@
   // ---------- drawing helpers ----------
   const stains = [[.4, 12, 1.5, 1.0, .5], [.9, 9, 2.1, 1.3, -.3], [-.2, 5, 1.2, 1.6, .9], [-3.4, 9.6, 1.8, 1.1, .2], [-5.2, 7.6, 1.0, 1.0, 0], [-8.4, 11.4, 2.3, 1.4, -.5], [-10.6, 8, 1.4, 1.1, .6]];
 
+    // ---------- APRON lower part (flap + waist rope). Drawn from front() so the legs can't hide it ----------
+  function drawApronLower(cx, S, f, white){
+    const s = CUR || {ox: 0, oy: 0, fo: 0};
+    const l = S.lean, ux = Math.sin(l), uy = -Math.cos(l), fx = Math.cos(l), fy = Math.sin(l);
+    const pt = (a, b, w) => ({x: S.pel.x + (ux * a + fx * b) * SZ + (w ? s.ox * w : 0), y: S.pel.y + (uy * a + fy * b) * SZ + (w ? s.oy * w : 0)});
+   const cloth = white ? '#fff' : '#ece8d8', clothD = white ? '#fff' : '#b4ae98', blood = white ? '#fff' : 'rgba(120,10,16,.9)', rope = white ? '#fff' : '#9a8157';
+    const sw = s.fo * .9;      // flap swing
+    cx.lineJoin = 'round'; cx.lineCap = 'round';
+
+    // flap: hangs from the rope, over the upper thighs, ragged hem
+    const fl = [pt(-4.6, 1.2, .3), pt(-4.2, 15.6, 1), pt(-9.4, 15.2 + sw * .3, .2), pt(-11.4, 13 + sw * .7, 0), pt(-10.2, 10.6 + sw * .8, 0),
+                pt(-12, 8.2 + sw * .8, 0), pt(-10.4, 5.6 + sw * .6, 0), pt(-11.4, 3.2 + sw * .4, 0), pt(-9.6, 1 + sw * .2, 0)];
+    trace(cx, fl, true); cx.fillStyle = cloth; cx.fill(); cx.strokeStyle = OUTC; cx.lineWidth = 1.4; cx.stroke();
+    if(!white){
+      cx.save(); trace(cx, fl, true); cx.clip();
+      cx.fillStyle = blood;
+      [[-7, 12, 2.4, 1.5, .3], [-8.6, 6.4, 2.6, 1.5, -.4], [-6, 4, 1.4, 1.1, 0], [-9.8, 13.4, 1.2, 1, 0]].forEach(([a, b, rx, ry, rot]) => { const p = pt(a, b, 0); cx.beginPath(); cx.ellipse(p.x, p.y, rx, ry, rot, 0, 7); cx.fill(); });
+      const patch = (a0, b0, a1, b1, col) => {          // stitched repair patch
+        const Q = [pt(a0, b0, 0), pt(a0, b1, 0), pt(a1, b1, 0), pt(a1, b0, 0)];
+        const c = {x: (Q[0].x + Q[2].x) / 2, y: (Q[0].y + Q[2].y) / 2};
+        trace(cx, Q, true); cx.fillStyle = col; cx.fill(); cx.strokeStyle = 'rgba(40,28,18,.6)'; cx.lineWidth = .5; cx.stroke();
+        trace(cx, Q.map(q => ({x: q.x + (c.x - q.x) * .2, y: q.y + (c.y - q.y) * .2})), true);
+        cx.strokeStyle = '#3a2c1e'; cx.lineWidth = .55; cx.setLineDash([1.1, .9]); cx.stroke(); cx.setLineDash([]);
+      };
+      patch(-6.4, 9.2, -9.2, 12.6, '#8d7b5c');
+      patch(-6.6, 2.6, -8.6, 5.2, '#b3a384');
+      cx.restore();
+      cx.strokeStyle = clothD; cx.lineWidth = .6;       // loose threads on the hem
+      for(let i = 2; i < 8; i++){ const p = fl[i], q = fl[i + 1];
+        for(let k = 0; k < 3; k++){ const u = k / 3, x = p.x + (q.x - p.x) * u, y = p.y + (q.y - p.y) * u, L = .9 + ((i * 7 + k * 5) % 5) * .35;
+          cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x - ux * L + (k % 2 ? .5 : -.4), y - uy * L); cx.stroke(); } }
+    }
+
+    // waist rope + knot with two tails
+    const rp = [pt(-3.6, -6, 0), pt(-5.6, 0, .1), pt(-6.2, 4, .3), pt(-6.1, 8.6, .7), pt(-4.8, 12.8, 1), pt(-3.8, 15.6, 1)];
+    const ropeLine = (col, w, dash) => {
+      cx.beginPath(); cx.moveTo(rp[0].x, rp[0].y);
+      for(let i = 1; i < rp.length - 1; i++) cx.quadraticCurveTo(rp[i].x, rp[i].y, (rp[i].x + rp[i + 1].x) / 2, (rp[i].y + rp[i + 1].y) / 2);
+      cx.lineTo(rp[rp.length - 1].x, rp[rp.length - 1].y);
+      cx.strokeStyle = col; cx.lineWidth = w; cx.setLineDash(dash || []); cx.stroke(); cx.setLineDash([]);
+    };
+    ropeLine(OUTC, 2.4 * SZ + 2.4); ropeLine(rope, 2.4 * SZ);
+    if(!white) ropeLine('#cdb680', 1.1, [1.2, 1.7]);
+    const kn = rp[3], t1 = pt(-10.6, 8 + sw * .02, 0), t2 = pt(-9.8, 10.8, 0);
+    [[OUTC, 4.4], [rope, 2.2]].forEach(([col, w]) => [t1, t2].forEach(t => {
+      cx.beginPath(); cx.moveTo(kn.x, kn.y); cx.quadraticCurveTo((kn.x + t.x) / 2 + sw * .3, (kn.y + t.y) / 2, t.x, t.y);
+      cx.strokeStyle = col; cx.lineWidth = w; cx.stroke();
+    }));
+    cx.beginPath(); cx.arc(kn.x, kn.y, 2.3, 0, 7); cx.fillStyle = white ? '#fff' : '#8a7048'; cx.fill(); cx.strokeStyle = OUTC; cx.lineWidth = 1.2; cx.stroke();
+  }
+
 
   // ---------- WEAPONS (visual only; real attacks / hook skills come later) ----------
   // HOOK = FRONT (near) hand: he HOLDS the short handle in his fist. A chain strap runs from the end of the handle to a cuff on his wrist
@@ -96,6 +148,10 @@
     const r = BODY.hand.r;
     cx.fillStyle = OUTC; cx.beginPath(); cx.arc(p.x, p.y, r + 1.6, 0, 7); cx.fill();
     cx.fillStyle = white ? '#fff' : P.hand; cx.beginPath(); cx.arc(p.x, p.y, r, 0, 7); cx.fill();
+    if(white) return;
+    cx.strokeStyle = 'rgba(70,38,28,.6)'; cx.lineWidth = .6; cx.lineCap = 'round';          // finger creases across the fist
+    [-.38, 0, .38].forEach(k => { cx.beginPath(); cx.moveTo(p.x - r * .1, p.y + r * k); cx.lineTo(p.x + r * .62, p.y + r * k); cx.stroke(); });
+    cx.fillStyle = '#2d2016'; [-.38, 0, .38].forEach(k => { cx.beginPath(); cx.ellipse(p.x + r * .78, p.y + r * k, .75, .5, 0, 0, 7); cx.fill(); });   // dirty fingernails
   };
 
   // ---- cleaver (far hand) ----
@@ -239,13 +295,13 @@
     body: BODY,
     colors: {
       shirt:   '#e6dcc0',   // glint of the little eye under the brow (visor) - the torso is drawn by torso() below
-      limb:    '#c79b86',   // near arm skin
-      far:     '#9d6f5d',   // far arm (shaded)
-      head:    '#d3a791',
-      dark:    '#2b1f18',   // belt / boots
-      hand:    '#a87763',   // rough, a little bloody butcher hands
-      legs:    '#4a3a2f',   // dirty brown trousers
-      legsFar: '#33271f'
+      limb:    '#d2ad8c',   // near arm skin: pale, yellowish, neglected
+      far:     '#a47b61',   // far arm (shaded)
+      head:    '#d9ba9a',
+      dark:    '#3a2a20',   // pelvis band (boots are drawn by foot() below)
+      hand:    '#c49a7b',   // rough, redder hands
+      legs:    '#cba483',   // BARE legs under the apron (no trousers)
+      legsFar: '#a07a60'
     },
 
     // ---------- THE BODY: hump back, buried neck, rounded shoulders, huge barrel belly, apron ----------
@@ -254,7 +310,7 @@
       const s = CUR || {ox: 0, oy: 0, fo: 0};
       const l = S.lean, ux = Math.sin(l), uy = -Math.cos(l), fx = Math.cos(l), fy = Math.sin(l);
       const pt = (a, b, w) => ({x: S.pel.x + (ux * a + fx * b) * SZ + (w ? s.ox * w : 0), y: S.pel.y + (uy * a + fy * b) * SZ + (w ? s.oy * w : 0)});
-      const OUT = B.outline, skin = white ? '#fff' : '#d1a58f', shade = white ? '#fff' : '#a8776a', hi = white ? '#fff' : '#e2bba5';
+      const OUT = B.outline, skin = white ? '#fff' : '#d6b595', shade = white ? '#fff' : '#a87a62', hi = white ? '#fff' : '#e6c8a8';
       cx.lineJoin = 'round'; cx.lineCap = 'round';
       const blob = pts => {
         const mid = (p, q) => ({x: (p.x + q.x) / 2, y: (p.y + q.y) / 2}), n = pts.length, m0 = mid(pts[n - 1], pts[0]);
@@ -266,15 +322,62 @@
       // thick neck / trapezius hump (head sits almost inside it)
       Body.capsule(cx, pt(13, -2), pt(17, 1), 12 * SZ + B.outlineW * 2, OUT); Body.capsule(cx, pt(13, -2), pt(17, 1), 12 * SZ, skin);
 
+     const cloth = white ? '#fff' : '#ece8d8', clothD = white ? '#fff' : '#b4ae98', blood = white ? '#fff' : 'rgba(120,10,16,.9)';
+      // stitched patch (torso space: a = up, b = forward) with dashed hand stitching a little inside the edge
+      const patch = (a0, b0, a1, b1, col, tilt) => {
+        const Q = [pt(a0, b0, 0), pt(a0 + tilt, b1, 0), pt(a1 + tilt, b1 + .3, 0), pt(a1, b0 - .2, 0)];
+        const c = {x: (Q[0].x + Q[1].x + Q[2].x + Q[3].x) / 4, y: (Q[0].y + Q[1].y + Q[2].y + Q[3].y) / 4};
+        trace(cx, Q, true); cx.fillStyle = col; cx.fill(); cx.strokeStyle = 'rgba(40,28,18,.6)'; cx.lineWidth = .5; cx.stroke();
+        trace(cx, Q.map(q => ({x: q.x + (c.x - q.x) * .17, y: q.y + (c.y - q.y) * .17})), true);
+        cx.strokeStyle = '#3a2c1e'; cx.lineWidth = .55; cx.setLineDash([1.1, .9]); cx.stroke(); cx.setLineDash([]);
+      };
+
+      // APRON FLAP + WAIST ROPE. Drawn BEHIND the belly, so the belly hangs freely over them. The rope runs under the belly and is tied in a knot
+      // under its front; the flap hangs from it down over his upper thighs (frayed, uneven hem).
+      const sw = s.fo * .9;     // flap swing
+      const fl = [pt(-4.6, 7.8, .85), pt(-5.8, 12.6, .9), pt(-9.6, 14 + sw, 0), pt(-11, 11.6 + sw * .8, 0), pt(-9.8, 9.2 + sw * .7, 0), pt(-11.2, 6.8 + sw * .5, 0), pt(-10, 4.6 + sw * .3, 0), pt(-5.4, 3.4, .3)];
+      const flapPath = () => { cx.beginPath(); cx.moveTo(fl[0].x, fl[0].y); for(let i = 1; i < fl.length; i++) cx.lineTo(fl[i].x, fl[i].y); cx.closePath(); };
+      flapPath(); cx.fillStyle = cloth; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke();
+      if(!white){
+        cx.save(); flapPath(); cx.clip();
+        cx.fillStyle = blood;
+        [[-6.8, 6, 1.7, 1.1, .3], [-8.2, 10.8, 2.1, 1.2, -.4], [-7.4, 12.8, 1, .9, 0]].forEach(([a, b, rx, ry, rot]) => { const p = pt(a, b + sw * .02, 0); cx.beginPath(); cx.ellipse(p.x, p.y, rx * 1.3, ry * 1.3, rot, 0, 7); cx.fill(); });
+        patch(-6.4, 4.6, -8.8, 7.6, '#8d7b5c', .3);           // mismatched repair patches
+        patch(-7.2, 10.6, -9.4, 13.4, '#b3a384', -.25);
+        cx.fillStyle = blood; const dh = fl[3]; cx.fillRect(dh.x - 3, dh.y - 3.5, 1.3, 3.5);   // drip running down from the hem
+        cx.restore();
+        // frayed, uneven hem: loose threads
+        cx.strokeStyle = clothD; cx.lineWidth = .6; cx.lineCap = 'round';
+        for(let i = 2; i < 6; i++){ const p = fl[i], q = fl[i + 1];
+          for(let k = 0; k < 4; k++){ const u = k / 4, x = p.x + (q.x - p.x) * u, y = p.y + (q.y - p.y) * u, L = .8 + ((i * 7 + k * 5) % 5) * .35;
+            cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x - ux * L + (k % 2 ? .5 : -.4), y - uy * L); cx.stroke(); } }
+      }
+      // waist rope (twisted) + knot with two loose tails, all under the belly
+      const rp = [pt(-4.4, -6, 0), pt(-6.2, 0, .1), pt(-6.8, 4, .3), pt(-6.7, 8.6, .7), pt(-5.2, 12.8, 1), pt(-3.8, 15.4, 1)];
+      const ropeLine = (col, w, dash) => {
+        cx.beginPath(); cx.moveTo(rp[0].x, rp[0].y);
+        for(let i = 1; i < rp.length - 1; i++) cx.quadraticCurveTo(rp[i].x, rp[i].y, (rp[i].x + rp[i + 1].x) / 2, (rp[i].y + rp[i + 1].y) / 2);
+        cx.lineTo(rp[rp.length - 1].x, rp[rp.length - 1].y);
+        cx.strokeStyle = col; cx.lineWidth = w; cx.setLineDash(dash || []); cx.stroke(); cx.setLineDash([]);
+      };
+      cx.lineCap = 'round'; cx.lineJoin = 'round';
+      ropeLine(OUT, 2.4 * SZ + B.outlineW * 1.6); ropeLine(white ? '#fff' : '#9a8157', 2.4 * SZ);
+      if(!white) ropeLine('#cdb680', 1.1, [1.2, 1.7]);
+      { const kn = rp[3], t1 = pt(-10.6, 8 + sw * .02, 0), t2 = pt(-9.8, 10.8, 0);
+        [[t1, 2.2], [t2, 2.2]].forEach(([t, w]) => { cx.beginPath(); cx.moveTo(kn.x, kn.y); cx.quadraticCurveTo((kn.x + t.x) / 2 + sw * .3, (kn.y + t.y) / 2, t.x, t.y); cx.strokeStyle = OUT; cx.lineWidth = w + B.outlineW * 1.4; cx.stroke(); });
+        [[t1, 2.2], [t2, 2.2]].forEach(([t, w]) => { cx.beginPath(); cx.moveTo(kn.x, kn.y); cx.quadraticCurveTo((kn.x + t.x) / 2 + sw * .3, (kn.y + t.y) / 2, t.x, t.y); cx.strokeStyle = white ? '#fff' : '#9a8157'; cx.lineWidth = w; cx.stroke(); });
+        cx.beginPath(); cx.arc(kn.x, kn.y, 2.3, 0, 7); cx.fillStyle = white ? '#fff' : '#8a7048'; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke(); }
+
       // main body: hunched back, round chest, enormous belly that sags below the belt
-      blob([pt(-3.5, -7.5), pt(1, -9.8), pt(6, -10.8), pt(11, -11.2), pt(15.5, -9), pt(17.4, -3), pt(17, 3.5),
-            pt(15, 7.5, .05), pt(11.5, 11.3, .2), pt(7.5, 14.8, .55), pt(2.5, 17.3, 1), pt(-2.5, 16, 1), pt(-5.8, 10.5, .75), pt(-5.8, 2, .2)]);
+      const BODY_PTS = [pt(-3.5, -7.5), pt(1, -9.8), pt(6, -10.8), pt(11, -11.2), pt(15.5, -9), pt(17.4, -3), pt(17, 3.5),
+            pt(15, 7.5, .05), pt(11.5, 11.3, .2), pt(7.5, 14.8, .55), pt(2.5, 17.3, 1), pt(-2.5, 16, 1), pt(-5.8, 10.5, .75), pt(-5.8, 2, .2)];
+      blob(BODY_PTS);
       cx.fillStyle = skin; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW; cx.stroke();
 
       if(!white){
         // belly: soft highlight, fold under the chest, sag fold, belly button crease, old blood splatter
         const g = cx.createRadialGradient(pt(5, 11.5).x, pt(5, 11.5).y, 1, pt(5, 11.5).x, pt(5, 11.5).y, 11);
-        g.addColorStop(0, 'rgba(240,205,185,.55)'); g.addColorStop(1, 'rgba(240,205,185,0)');
+        g.addColorStop(0, 'rgba(244,222,190,.5)'); g.addColorStop(1, 'rgba(244,222,190,0)');
         cx.fillStyle = g; cx.fill();
         cx.strokeStyle = shade; cx.lineWidth = 1.2;
         const q = (a1, b1, w1, a2, b2, w2, a3, b3, w3) => { const p1 = pt(a1, b1, w1), p2 = pt(a2, b2, w2), p3 = pt(a3, b3, w3); cx.beginPath(); cx.moveTo(p1.x, p1.y); cx.quadraticCurveTo(p2.x, p2.y, p3.x, p3.y); cx.stroke(); };
@@ -283,61 +386,190 @@
         q(2.8, 15.2, 1, 2.4, 16.6, 1, 2, 15.3, 1);                    // belly button
         cx.strokeStyle = shade; cx.lineWidth = .9;
         q(-4, -6.5, 0, 0, -9.2, 0, 4, -9.4, 0);                       // spine / back roll
+        // heavy horizontal belly folds (clipped to the body), a shadow under every crease, reddish blotches, age spots, old healed scars
+        cx.save(); blob(BODY_PTS); cx.clip(); cx.lineCap = 'round';
+        const crease = (a, b0, b1, sag, w1) => {
+          const p1 = pt(a, b0, .1), p2 = pt(a - sag, (b0 + b1) / 2, w1), p3 = pt(a + .4, b1, 1);
+          const line = (dy, col, w) => { cx.strokeStyle = col; cx.lineWidth = w; cx.beginPath(); cx.moveTo(p1.x, p1.y + dy); cx.quadraticCurveTo(p2.x, p2.y + dy, p3.x, p3.y + dy); cx.stroke(); };
+          line(1.1, 'rgba(78,32,24,.30)', 2.4); line(0, 'rgba(128,76,60,.75)', .9); line(-1.2, 'rgba(246,226,198,.2)', .6);
+        };
+        crease(6.6, 8, 16.4, 1.1, .5); crease(3.6, 7.2, 17, 1.5, .8); crease(.6, 6.6, 16.4, 1.7, .9); crease(-2.4, 6, 14.6, 1.3, .9);
+        cx.fillStyle = 'rgba(196,76,60,.20)';
+        [[7.5, 12, 2.6, 1.8, .2], [12.8, 3.4, 2.6, 1.6, .3], [2.5, 9.5, 2.2, 1.6, 0], [15, -6, 2, 1.4, .4]].forEach(([a, b, rx, ry, rot]) => { const p = pt(a, b, .3); cx.beginPath(); cx.ellipse(p.x, p.y, rx, ry, rot, 0, 7); cx.fill(); });
+        cx.fillStyle = 'rgba(122,78,46,.6)';
+        [[13.4, .2, .45], [11.2, 6, .35], [9.4, -2.5, .4], [6.2, 12.6, .45], [1.6, 13.4, .4], [-1.2, 10, .35], [14.6, -5.4, .4], [9, -8, .4], [4.4, 5, .3], [10.6, 11, .35]].forEach(([a, b, r]) => { const p = pt(a, b, .3); cx.beginPath(); cx.arc(p.x, p.y, r, 0, 7); cx.fill(); });
+        [[[14.4, -1.2], [11.6, 4.6]], [[10.2, -3.4], [8.8, 2.4]]].forEach(([u, v]) => {          // old healed scars on the chest: pale ridge with a faint dark edge
+          const p = pt(u[0], u[1]), q2 = pt(v[0], v[1]);
+          cx.strokeStyle = 'rgba(120,64,50,.45)'; cx.lineWidth = 1.3; cx.beginPath(); cx.moveTo(p.x, p.y); cx.lineTo(q2.x, q2.y); cx.stroke();
+          cx.strokeStyle = 'rgba(248,232,214,.8)'; cx.lineWidth = .7; cx.beginPath(); cx.moveTo(p.x, p.y); cx.lineTo(q2.x, q2.y); cx.stroke();
+          const mx = (p.x + q2.x) / 2, my = (p.y + q2.y) / 2; cx.lineWidth = .5; cx.beginPath(); cx.moveTo(mx - 1, my - .7); cx.lineTo(mx + 1, my + .7); cx.stroke();
+        });
+        cx.restore();
         cx.fillStyle = 'rgba(107,15,20,.75)';
         [[4.4, 15.6, 1.2], [.6, 16.3, .9], [6.2, 14, .8]].forEach(([a, b, r]) => { const p = pt(a, b, 1); cx.beginPath(); cx.arc(p.x, p.y, r, 0, 7); cx.fill(); });
       }
 
       // APRON: neck strap, bib over the chest, waist tie, lower flap hanging under the belly. The belly stays exposed between them.
-      const cloth = white ? '#fff' : '#cdbfa0', clothD = white ? '#fff' : '#a8997a', blood = white ? '#fff' : 'rgba(110,14,20,.85)';
-      Body.capsule(cx, pt(17, -1.2), pt(14.8, 8.2, .1), 2.6 * SZ + B.outlineW * 2, OUT); Body.capsule(cx, pt(17, -1.2), pt(14.8, 8.2, .1), 2.6 * SZ, clothD);   // strap over the shoulders
-      blob([pt(15, 7.4, .05), pt(14.6, 10.6, .1), pt(11.6, 12.2, .2), pt(8.4, 13.4, .4), pt(8.2, 9.4, .25), pt(10.4, 6.4, .1), pt(13.2, 6.4, .05)]);  // bib
-      cx.fillStyle = cloth; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke();
+      Body.capsule(cx, pt(17, -1.2), pt(14.8, 8.2, .1), 3.4 * SZ + B.outlineW * 2, OUT); Body.capsule(cx, pt(17, -1.2), pt(14.8, 8.2, .1), 3.4 * SZ, clothD);   // thick, worn shoulder strap
+      if(!white){ const s0 = pt(16.9, -1.2), s1 = pt(14.9, 8.2, .1); cx.strokeStyle = '#3a2c1e'; cx.lineWidth = .55; cx.setLineDash([1.1, .9]); cx.beginPath(); cx.moveTo(s0.x, s0.y); cx.lineTo(s1.x, s1.y); cx.stroke(); cx.setLineDash([]); }   // strap stitching
+      // APRON FRONT: one big panel from the chest down over the whole belly (so the belly is covered)
+      const BIB = [pt(17, .5, .02), pt(16.4, 6, .05), pt(14.6, 9.6, .15), pt(11.6, 13.4, .3), pt(7.6, 17, .6), pt(2.6, 18.8, 1), pt(-3, 18, 1),
+                   pt(-7.5, 15, .8), pt(-9, 9, .4), pt(-8, 3, .2), pt(0, 3.5, .2), pt(8, 2.5, .1), pt(13, .5, .05)];
+      blob(BIB); cx.fillStyle = cloth; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke();
       if(!white){
-        cx.save(); blob([pt(15, 7.4, .05), pt(14.6, 10.6, .1), pt(11.6, 12.2, .2), pt(8.4, 13.4, .4), pt(8.2, 9.4, .25), pt(10.4, 6.4, .1), pt(13.2, 6.4, .05)]); cx.clip();
+        cx.save(); blob(BIB); cx.clip();
+        const sh = cx.createRadialGradient(pt(4, 12).x, pt(4, 12).y, 1, pt(4, 12).x, pt(4, 12).y, 13);   // belly bulge under the cloth
+        sh.addColorStop(0, 'rgba(255,250,235,.35)'); sh.addColorStop(1, 'rgba(120,100,70,.25)');
+        cx.fillStyle = sh; cx.fill();
         cx.fillStyle = blood;
-        stains.slice(0, 3).forEach(([a, b, rx, ry, rot]) => { const p = pt(a + 10.2, b - 2, .2); cx.beginPath(); cx.ellipse(p.x, p.y, rx * 1.3, ry * 1.3, rot, 0, 7); cx.fill(); });
+        [[11, 8, 2.8, 1.7, .3], [6, 12, 3.2, 2, -.3], [1, 14, 2.4, 1.5, .2], [-3, 10, 2, 1.3, 0], [14, 3, 1.4, 1.1, 0]].forEach(([a, b, rx, ry, rot]) => { const p = pt(a, b, .4); cx.beginPath(); cx.ellipse(p.x, p.y, rx, ry, rot, 0, 7); cx.fill(); });
+        patch(10, 5, 12.8, 8.6, '#9c8b6a', .2);
+        patch(-1, 9, -3.8, 12.6, '#b3a384', -.2);
+        cx.strokeStyle = 'rgba(90,76,52,.45)'; cx.lineWidth = .7;     // cloth folds over the belly
+        [[8.5, 6, 6.5, 14], [3.5, 6.5, 1.5, 15]].forEach(([a0, b0, a1, b1]) => { const p = pt(a0, b0, .3), q = pt(a1, b1, .8); cx.beginPath(); cx.moveTo(p.x, p.y); cx.lineTo(q.x, q.y); cx.stroke(); });
         cx.restore();
+        const e = [pt(15.6, 6.6, .05), pt(13, 10.2, .2), pt(9.4, 14.2, .5), pt(4.6, 16.8, .9), pt(-1.4, 16.4, 1), pt(-6, 13.4, .8)];   // stitching along the edge
+        trace(cx, e, false); cx.strokeStyle = '#3a2c1e'; cx.lineWidth = .55; cx.setLineDash([1.1, .9]); cx.stroke(); cx.setLineDash([]);
       }
-      // waist tie (rope) + lower flap
-      Body.capsule(cx, pt(-.6, -9.4), pt(-1.4, -4.2), 2 * SZ + B.outlineW * 2, OUT); Body.capsule(cx, pt(-.6, -9.4), pt(-1.4, -4.2), 2 * SZ, clothD);
-      const sw = s.fo * .9;     // flap swing
-      const fl = [pt(-4.6, 7.8, .85), pt(-5.8, 12.6, .9), pt(-14, 14 + sw, 0), pt(-15.2, 11 + sw * .8, 0), pt(-14.4, 8.4 + sw * .6, 0), pt(-15, 6.2 + sw * .4, 0), pt(-13.6, 4.4 + sw * .2, 0), pt(-5.4, 3.4, .3)];
-      cx.beginPath(); cx.moveTo(fl[0].x, fl[0].y); for(let i = 1; i < fl.length; i++) cx.lineTo(fl[i].x, fl[i].y); cx.closePath();
-      cx.fillStyle = cloth; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke();
-      if(!white){
-        cx.save(); cx.beginPath(); cx.moveTo(fl[0].x, fl[0].y); for(let i = 1; i < fl.length; i++) cx.lineTo(fl[i].x, fl[i].y); cx.closePath(); cx.clip();
-        cx.fillStyle = blood;
-        stains.slice(3).forEach(([a, b, rx, ry, rot]) => { const p = pt(a - 2, b - 1.5 + sw * .3, 0); cx.beginPath(); cx.ellipse(p.x, p.y, rx * 1.4, ry * 1.4, rot, 0, 7); cx.fill(); });
-        cx.fillRect(fl[3].x - 3, fl[3].y - 5, 1.4, 5);   // drip running down from the hem
-        cx.restore();
-      }
-
       // rounded, extremely broad shoulders (deltoid caps, 1.5x): far one first, near one on top
       const delt = (A, r, c) => { cx.beginPath(); cx.arc(A.s.x, A.s.y, r, 0, 7); cx.fillStyle = c; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW; cx.stroke(); };
-      delt(S.aF, 6.6 * SZ, white ? '#fff' : P.far); delt(S.aN, 8 * SZ, white ? '#fff' : '#d8ae98');
+      delt(S.aF, 6.6 * SZ, white ? '#fff' : P.far); delt(S.aN, 8 * SZ, white ? '#fff' : '#dbb797');
     },
 
-    // ---------- face details (little scowl) drawn on the head ----------
+   // ---------- face details (little scowl) drawn on the head ----------
     front(cx, f, t, S, P){
       const wh = f.flash > 0;
+            cx.save(); drawApronLower(cx, S, f, wh); cx.restore();
       cx.save(); drawHook(cx, S, f, P, wh); cx.restore();      // hook in the FRONT hand (fist redrawn over the handle). The back-hand cleaver is drawn in behind()
+      if(!wh){        // near forearm: faint stubble, old healed scars; darkened elbow and knee (bare, aged skin)
+        const A = S.aN, dx = A.hand.x - A.el.x, dy = A.hand.y - A.el.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
+        cx.save(); cx.lineCap = 'round';
+        cx.fillStyle = 'rgba(104,56,42,.45)'; cx.beginPath(); cx.arc(A.el.x, A.el.y, 3.3, 0, 7); cx.fill();                    // dark elbow
+        cx.strokeStyle = 'rgba(66,42,30,.55)'; cx.lineWidth = .5;
+        for(let k = 0; k < 8; k++){ const tt = .16 + k * .085, off = ((k * 37) % 5 - 2) * .95, x = A.el.x + dx * tt + nx * off, y = A.el.y + dy * tt + ny * off;
+          cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + ux * .9 + nx * .35, y + uy * .9 + ny * .35); cx.stroke(); }                 // arm stubble
+        [[.42, 2.6, -2.8], [.68, 2, -2.2]].forEach(([tt, o1, o2]) => { const x = A.el.x + dx * tt, y = A.el.y + dy * tt;          // healed scars across the forearm
+          cx.strokeStyle = 'rgba(248,232,214,.55)'; cx.lineWidth = .7; cx.beginPath(); cx.moveTo(x + nx * o1, y + ny * o1); cx.lineTo(x + nx * o2 + ux * 1.1, y + ny * o2 + uy * 1.1); cx.stroke(); });
+        cx.restore();
+      }
       const ha = S.lean + ((f.rig && f.rig.j && f.rig.j.head.a) || 0), r = BODY0.head.r;
       // where his MOUTH really is in the world (follows the bow / head tilt) - the vomit stream in arena.js spawns from here
-      { const mx = 3.6 * SZ, my = 4.2 * SZ, wx = S.head.x + mx * Math.cos(ha) - my * Math.sin(ha), wy = S.head.y + mx * Math.sin(ha) + my * Math.cos(ha);
+      { const mx = 3.5 * SZ, my = 3.8 * SZ, wx = S.head.x + mx * Math.cos(ha) - my * Math.sin(ha), wy = S.head.y + mx * Math.sin(ha) + my * Math.cos(ha);
         f.mouth = {x: f.x + f.face * wx, y: f.y + wy}; }
       cx.save(); cx.translate(S.head.x, S.head.y); cx.rotate(ha); cx.scale(SZ, SZ);
       if(f.flash > 0){ cx.restore(); return; }
-      cx.fillStyle = 'rgba(70,45,40,.4)'; cx.beginPath(); cx.arc(0, 0, r - .4, .15, Math.PI - .5); cx.closePath(); cx.fill();   // stubble / heavy jowl
-      cx.strokeStyle = '#2a1512'; cx.lineWidth = 1.1; cx.lineCap = 'round';
-      // mouth: flat and mean, but it opens wide to bite during SLAUGHTERHOUSE (chomp on each chop, then two big bites)
-      const bite = f.A && f.A.skill === 'vomit' && f.atk > 0 ? Body.keys(atkP(f), [[0,0],[.15,.2],[.4,.4],[.5,1],[.92,1],[1,0]]) : f.A && f.A.skill === 'slaughterhouse' && f.atk > 0 ? Body.keys(atkP(f), [[0,0],[.30,0],[.32,.8],[.35,0],[.38,0],[.40,.8],[.43,0],[.46,0],[.475,.8],[.50,0],[.66,0],[.70,1],[.75,.1],[.80,1],[.86,1],[.90,0],[1,0]]) : 0;
+
+      // ---------- HEAD, JAW & CHIN: tighter, grounded jaw/chin integrated into the lower skull ----------
+      const OUTL = '#0b0f1c', SK = '#d9bb9c', SKD = '#b0826a', SKJ = '#c49b7e', SH = 'rgba(95,52,42,.65)';
+      cx.lineJoin = 'round'; cx.lineCap = 'round';
+
+      // grounded jaw & subtle double-chin tuck right beneath the cranium (less puffy/protruding)
+      cx.beginPath(); cx.ellipse(1.1, 3.6, 3.4, 2.0, .06, 0, Math.PI * 2);
+      cx.fillStyle = SKJ; cx.fill();
+      cx.strokeStyle = OUTL; cx.lineWidth = 1.45; cx.stroke();
+
+      cx.save(); cx.beginPath(); cx.arc(0, 0, r, 0, Math.PI * 2); cx.clip();
+      // bald skull (this repaint also hides the default ragdoll visor)
+      const g = cx.createRadialGradient(-1.4, -2.8, .4, 0, 0, r + 1);
+      g.addColorStop(0, '#e6cdb0'); g.addColorStop(.55, SK); g.addColorStop(1, SKD);
+      cx.fillStyle = g; cx.fillRect(-r - 1, -r - 1, 2 * r + 2, 2 * r + 2);
+
+      // reddish blotches, scalp sheen, age spots & forehead creases
+      cx.fillStyle = 'rgba(190,80,62,.20)';
+      [[3.0, 2.6, 2.4, 1.7], [2.4, -3.4, 2.4, 1.1], [-2.4, 2.2, 1.8, 1.4]].forEach(([x, y, rx, ry]) => {
+        cx.beginPath(); cx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); cx.fill();
+      });
+      cx.fillStyle = 'rgba(255,244,222,.28)';
+      cx.beginPath(); cx.ellipse(-1.2, -3.9, 2.5, .9, -.25, 0, Math.PI * 2); cx.fill();
+
+      cx.fillStyle = 'rgba(118,74,42,.58)';
+      [[-2.3, -3.2, .42], [.2, -4.3, .34], [-3.3, -.8, .4], [1.6, -2.9, .3], [-.6, 3.1, .28], [1.9, 4.1, .25]].forEach(([x, y, rr]) => {
+        cx.beginPath(); cx.arc(x, y, rr, 0, Math.PI * 2); cx.fill();
+      });
+
+      cx.strokeStyle = 'rgba(112,70,54,.32)'; cx.lineWidth = .4;
+      [[-1.2, -4.2, .6, -4.6, 2.2, -4.2], [-.6, -3.5, .8, -3.8, 2.6, -3.4]].forEach(([x1, y1, cx1, cy1, x2, y2]) => {
+        cx.beginPath(); cx.moveTo(x1, y1); cx.quadraticCurveTo(cx1, cy1, x2, y2); cx.stroke();
+      });
+
+   
+      // INSANE EYES: plain white circles, no pupils, ringed in black
+      // ONE ANGRY EYE (side view): white, no pupil, black ring. The lid slants down toward the nose.
+      // ONE ANGRY EYE (side view), small: white, no pupil, black ring. The lid slants down toward the nose.
+      // ONE ROUND EYE (side view), small: white circle, no pupil, black ring, angry brow slanting down toward the nose
+      cx.fillStyle = '#120a08';
+      cx.beginPath(); cx.moveTo(1.9, -3.0); cx.lineTo(4.9, -1.9); cx.lineTo(4.9, -1.2); cx.lineTo(1.9, -2.3); cx.closePath(); cx.fill();
+      const ex = 3.5, ey = -.6, er = .85;
+      cx.fillStyle = 'rgba(0,0,0,.35)'; cx.beginPath(); cx.arc(ex, ey, er * 2.1, 0, Math.PI * 2); cx.fill();   // soft black bruise
+      cx.fillStyle = '#000'; cx.beginPath(); cx.arc(ex, ey, er * 1.5, 0, Math.PI * 2); cx.fill();            // hard black ring
+      cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(ex, ey, er, 0, Math.PI * 2); cx.fill();                   // white circle                                    // white eye                                    // white eye
+      // small ear, half buried under the neck roll
+      cx.fillStyle = '#c99a7e'; cx.beginPath(); cx.ellipse(-1.7, 1, 1.15, 1.7, .15, 0, Math.PI * 2); cx.fill();
+      cx.strokeStyle = '#7a4a3a'; cx.lineWidth = .55; cx.stroke();
+      cx.beginPath(); cx.arc(-1.6, .9, .55, -2.4, 1.2); cx.stroke();
+
+      // subtle lower cheek & chin crease (clean contour without an oversized hanging pouch)
+      cx.fillStyle = 'rgba(186,144,118,.78)';
+      cx.beginPath(); cx.ellipse(-0.8, 2.5, 2.4, .95, .08, 0, Math.PI * 2); cx.fill();
+      cx.strokeStyle = SH; cx.lineWidth = .5;
+      cx.beginPath(); cx.moveTo(-2.8, 2.7); cx.quadraticCurveTo(-0.7, 3.6, 1.5, 2.8); cx.stroke();
+
+      cx.fillStyle = 'rgba(238,208,180,.32)';
+      cx.beginPath(); cx.ellipse(2.4, 2.5, 2.1, 1.4, 0, 0, Math.PI * 2); cx.fill();
+      cx.restore();
+
+      // mouth & jaw expression: opens wide on slaughterhouse/vomit, otherwise tight slack jaw with crooked teeth
+      const bite = f.A && f.A.skill === 'vomit' && f.atk > 0
+        ? Body.keys(atkP(f), [[0,0],[.15,.2],[.4,.4],[.5,1],[.92,1],[1,0]])
+        : f.A && f.A.skill === 'slaughterhouse' && f.atk > 0
+          ? Body.keys(atkP(f), [[0,0],[.30,0],[.32,.8],[.35,0],[.38,0],[.40,.8],[.43,0],[.46,0],[.475,.8],[.50,0],[.66,0],[.70,1],[.75,.1],[.80,1],[.86,1],[.90,0],[1,0]])
+          : 0;
+
       if(bite > .08){
-        const op = 1.2 + bite * 3.4;
-        cx.fillStyle = '#3a0a0e'; cx.beginPath(); cx.ellipse(3.4, 3.5 + op * .35, 2.9, op, 0, 0, 7); cx.fill();                    // open mouth
-        cx.fillStyle = '#f0e8dc'; for(let i = 0; i < 3; i++){ const tx = 1.4 + i * 1.5; cx.beginPath(); cx.moveTo(tx, 3.2); cx.lineTo(tx + .7, 3.2); cx.lineTo(tx + .35, 4.6); cx.fill(); }   // top teeth
-      } else { cx.beginPath(); cx.moveTo(1.6, 3.4); cx.lineTo(4.6, 3.1); cx.stroke(); }                                              // flat mean mouth
-      cx.fillStyle = 'rgba(120,16,22,.9)'; cx.beginPath(); cx.arc(4.3, 3.7, .8, 0, 7); cx.fill();                                   // blood at the corner
-      cx.strokeStyle = 'rgba(120,60,60,.8)'; cx.lineWidth = .8; cx.beginPath(); cx.moveTo(-1, -3.6); cx.lineTo(1.6, 1.2); cx.stroke();   // old scar
+        const op = 1.0 + bite * 2.8;
+        cx.fillStyle = '#3a0a0e'; cx.beginPath(); cx.ellipse(3.1, 3.1 + op * .28, 2.4, op, 0, 0, Math.PI * 2); cx.fill();
+        cx.fillStyle = '#d6c58a';
+        for(let i = 0; i < 3; i++){
+          const tx = 1.5 + i * 1.25;
+          cx.beginPath(); cx.moveTo(tx, 2.8); cx.lineTo(tx + .6, 2.8); cx.lineTo(tx + .3, 4.0); cx.closePath(); cx.fill();
+        }
+      } else {
+        // flat, grim mouth: no smile, ends turn slightly down
+        cx.strokeStyle = '#2a0a0a'; cx.lineWidth = .9; cx.lineCap = 'round';
+        cx.beginPath(); cx.moveTo(1.5, 3.9); cx.quadraticCurveTo(3.1, 3.1, 4.6, 3.9); cx.stroke();
+      }
+      // nose: rounded tip + nostril wing + subtle highlight & nostril
+      cx.strokeStyle = OUTL; cx.lineWidth = 1.1;
+      cx.beginPath(); cx.arc(5.3, 1.1, .82, 0, Math.PI * 2); cx.stroke();
+      cx.beginPath(); cx.arc(4.8, 1.72, .52, 0, Math.PI * 2); cx.stroke();
+      cx.fillStyle = '#cf9580';
+      cx.beginPath(); cx.arc(5.3, 1.1, .82, 0, Math.PI * 2); cx.fill();
+      cx.beginPath(); cx.arc(4.8, 1.72, .52, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = 'rgba(255,226,205,.4)';
+      cx.beginPath(); cx.ellipse(5.1, .78, .3, .18, -.5, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = '#2a0e0b';
+      cx.beginPath(); cx.ellipse(5.55, 1.45, .24, .16, .3, 0, Math.PI * 2); cx.fill();
+      cx.restore();
+    },
+
+    // ---------- heavy leather butcher boots (replaces the default foot): shaft up the shin, wide rounded toe, thick dark sole ----------
+    foot(cx, leg, P, white, f, far){
+      const F = BODY.foot, W = F.w * 1.05, OW_ = 1.6;
+      const phi = leg.planted ? 0 : clamp(-leg.sa * .5, -.8, .8), lift = leg.planted ? clamp((leg.hip.x - leg.ankle.x - 2) * .12, 0, 3.5) : 0;
+      const a = {x: leg.ankle.x - 1.5, y: leg.ankle.y - lift}, b = {x: leg.ankle.x + (F.len - 1.5) * Math.cos(phi), y: leg.ankle.y + (F.len - 1.5) * Math.sin(phi)};
+      const dx = leg.knee.x - leg.ankle.x, dy = leg.knee.y - leg.ankle.y, L = Math.hypot(dx, dy) || 1, top = {x: a.x + dx / L * 3.4, y: a.y + dy / L * 3.4};
+      const leather = white ? '#fff' : far ? '#2f1d11' : '#4a2e1b', sole = white ? '#fff' : '#140c07', band = white ? '#fff' : far ? '#22140b' : '#33200f';
+      const WS = BODY.shin.w + 1.6;
+      if(!white){ cx.fillStyle = far ? 'rgba(70,36,26,.45)' : 'rgba(104,56,42,.5)'; cx.beginPath(); cx.arc(leg.knee.x, leg.knee.y, 3.8, 0, Math.PI * 2); cx.fill(); }
+      Body.capsule(cx, a, top, WS + OW_ * 2, OUTC); Body.capsule(cx, a, b, W + OW_ * 2, OUTC);
+      Body.capsule(cx, a, top, WS, leather); Body.capsule(cx, a, b, W, leather);
+      Body.capsule(cx, {x: a.x, y: a.y + W * .24}, {x: b.x, y: b.y + W * .24}, W * .34, sole);
+      if(white) return;
+      Body.capsule(cx, top, {x: top.x - dx / L * 1.4, y: top.y - dy / L * 1.4}, WS, band);
+      cx.save(); cx.lineCap = 'round'; cx.strokeStyle = far ? '#5a4128' : '#7d5a39'; cx.lineWidth = .7;
+      cx.beginPath(); cx.moveTo(a.x + 1.4, a.y - W * .18); cx.lineTo(b.x - 1.2, b.y - W * .22); cx.stroke();
+      cx.strokeStyle = '#8a6a46'; cx.lineWidth = .5; cx.setLineDash([1, .9]);
+      cx.beginPath(); cx.moveTo(a.x + dx / L * 2.2 + 1.2, a.y + dy / L * 2.2 - WS * .3); cx.lineTo(a.x + dx / L * 2.2 + 1.2, a.y + dy / L * 2.2 + WS * .3); cx.stroke();
       cx.restore();
     },
 
@@ -346,15 +578,15 @@
       const dx = h.x - h.ox, dy = h.y - h.oy, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, ang = Math.atan2(dy, dx);
       for(let i = 0; i < L - 6; i += 7){
         cx.save(); cx.translate(h.ox + ux * (i + 4), h.oy + uy * (i + 4)); cx.rotate(ang + (i % 14 ? Math.PI / 2 : 0));
-        cx.beginPath(); cx.ellipse(0, 0, 3.6, 2.2, 0, 0, 7); cx.strokeStyle = OUTC; cx.lineWidth = 3.2; cx.stroke(); cx.strokeStyle = '#aab0b7'; cx.lineWidth = 1.5; cx.stroke(); cx.restore();
+        cx.beginPath(); cx.ellipse(0, 0, 3.6, 2.2, 0, 0, Math.PI * 2); cx.strokeStyle = OUTC; cx.lineWidth = 3.2; cx.stroke(); cx.strokeStyle = '#aab0b7'; cx.lineWidth = 1.5; cx.stroke(); cx.restore();
       }
       cx.save(); cx.translate(h.x, h.y); cx.rotate(ang); cx.lineCap = 'round';
       [[OUTC, 7], [STEEL, 4.2]].forEach(([col, w]) => { cx.strokeStyle = col; cx.lineWidth = w; cx.beginPath(); cx.moveTo(-6, 0); cx.lineTo(8, 0); cx.arc(8, 7, 7, -Math.PI / 2, Math.PI * .75); cx.stroke(); });
       cx.restore();
     },
 
-    // ---------- belly + apron simulation runs here (behind() is called right before torso()) ----------
-    behind(cx, f, t, S, P){ CUR = simBelly(f, t, S); drawCleaver(cx, S, f, CUR, f.flash > 0); },   // back-hand cleaver: layered BEHIND the far arm, torso and head
+    // ---------- sprite layering order: back cleaver + belly spring first, then torso, front hook & head ----------
+    behind(cx, f, t, S, P){ CUR = simBelly(f, t, S); drawCleaver(cx, S, f, CUR, f.flash > 0); },
 
     // ---------- HEAVY idle / waddle / landing ----------
     pose(tg, f, t, run, K){
@@ -364,8 +596,8 @@
 
       const IDLE = {
         lean: .2 + b * .012, head: -.1 + Math.sin(t * 1.4 + .6) * .02,       // constantly hunched forward under the weight
-        aN: -.3 + b * .015, eN: .8,                                            // heavy forearms hang beside the body
-        aF: .3 - b * .015, eF: .35,
+        aN: -.12 + b * .015, eN: .4,                                            // heavy forearms hang beside the body
+        aF: .22 - b * .015, eF: .3,
         tN: STAND.tN, kN: STAND.kN, tF: STAND.tF, kF: STAND.kF
       };
       const RUN = {                                                             // waddle: short heavy steps, arms barely swing
@@ -448,4 +680,4 @@
       tg.kN = st.kN ? K(p, st.kN) : STAND.kN;  tg.kF = st.kF ? K(p, st.kF) : STAND.kF;
     }
   });
-})();
+})();i

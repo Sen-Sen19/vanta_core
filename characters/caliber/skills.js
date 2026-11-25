@@ -23,9 +23,23 @@ Characters.skills('caliber', {
   // TUNE HERE: dmg (blast power), radius (blast size), cd (cooldown), range / minR (how far he can land it), flight / grav (arc height and travel time = dodge window), kbx / kby (push).
   skills: [
     {name:'EXPLOSIVE SHOT', kind:'lobshot', aim:true, cd:8, cast:.4, windup:.18, range:520, minR:90, flight:.95, grav:1400, r:6, radius:70, dmg:1.6, kbx:.6, kby:.5, stunx:1, shake:2, hitstop:.08,
-      desc:'Drag to aim an arc: the drag length sets where it lands, and a ring shows the blast. He lobs an explosive shell that flies slowly enough to dodge, and detonates the moment it touches the ground or an enemy. Everyone in the blast ring takes damage and is pushed slightly back. No delay, no friendly fire.'}
+      desc:'Drag to aim an arc: the drag length sets where it lands, and a ring shows the blast. He lobs an explosive shell that flies slowly enough to dodge, and detonates the moment it touches the ground or an enemy. Everyone in the blast ring takes damage and is pushed slightly back. No delay, no friendly fire.'},
+    // SKILL II - RECOIL ESCAPE: no aim. He hops backward (in the direction he is facing), fires a burst of bullets BEHIND him while airborne, then lands facing the enemy.
+    //   wind = wind-up before the hop (s, rooted). hop = upward launch speed (px/s). dist = horizontal kick backward (px/s, negative lunge). burst = how many bullets fire while in the air.
+    //   The face-flip happens at flipAt (0..1 of the air time): he spins 180° and lands looking the other way (now facing the enemy he just created distance from).
+    //   Bullets fire at evenly-spaced intervals across the hop, starting at burstFrom (0..1) and ending at burstTo (0..1). Each bullet uses the same `shot` object.
+    //   TUNE HERE: cd, wind, hop, dist, burst, shot.dmg, shot.speed (bullet range = speed x life).
+    {name:'RECOIL ESCAPE', kind:'recoilescape', aim:false, cd:9, wind:.18, hop:680, dist:340, burst:4, burstFrom:.2, burstTo:.85, flipAt:.5,
+      shot:{r:4, speed:860, life:.8, dmg:.7, kbx:.35, kby:.2, stunx:1, shake:.6, hitstop:.03},
+      type:'Aerial repositioning - rear burst', desc:'He leaps backward and fires a burst of bullets behind him mid-air, then lands facing the enemy. Great escape tool that also punishes any enemy who chased him.'}
   ],
-  ultimate: null,
+  // ULTIMATE - BULLET RAIN: drag to aim a wide target zone. He fires a burst upward (`cast` s, rooted), then after a short delay (`delay` s) dense shrapnel rains down across the whole zone.
+  //   `bullets` individual bullet impacts land at random positions spread evenly across the zone (halfW = half-width of the zone). They land one after another every `gap` s, in random order.
+  //   Each impact hits a column `strikeW` wide and `height` px tall above the ground. Enemies inside the zone CAN be hit multiple times if they stay inside.
+  //   Like Skyfall: a hit during the cast (before any bullet lands) cancels the whole thing.
+  //   TUNE HERE: cd, bullets (more = denser), gap (tighter spacing = harder to escape), halfW (zone width), dmg (per bullet), delay, strikeW (hit column width), height.
+  ultimate: {name:'BULLET RAIN', kind:'bulletrain', aim:true, cd:40, cast:.5, delay:.6, bullets:16, gap:.12, halfW:160, strikeW:30, height:200, dmg:.9, kbx:.2, kby:.5, stunx:.8, shake:.8, hitstop:.02,
+    type:'Ground target - Area denial', desc:'Drag to aim a wide danger zone. He fires a burst upward, then after a short delay a storm of shrapnel rains down across the whole area. Bullets land one by one in random order: enemies caught inside can be hit by multiple impacts. Dodge by exiting the zone before the rain hits.'},
   // PASSIVE - BULLET CHAMBER: a magazine of `max` bullets. EVERY pistol bullet that leaves a gun uses one (a miss still counts; the heavy slug counts as one).
   //   The LAST bullet (the 5th) is ALWAYS critical, even if the first 4 missed. Crit = damage x critMult and knockback x critKb.
   //   After the 5th bullet he reloads by himself for `reload` s: he can still move and jump, but he cannot use the pistols. Then the magazine is full again and the cycle repeats.

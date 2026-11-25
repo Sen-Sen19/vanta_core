@@ -1,4 +1,6 @@
 // TITAN art - ragdoll sizes + colors, heavy stance, combo punch poses, and punch effects (charge glow, fist trail, stomp dust).
+// LOOK (redesign): shirtless powerlifter, messy black hair + scarred face, black tactical pants + boots, and two industrial hydraulic + turbo GAUNTLETS (matte black, steel, orange).
+// The gauntlets, head, knee pads and pockets are drawn by gauntlet() / drawHead() / kneePad() / pocket() below. Poses, punches and effects are unchanged.
 // Hooks used: body (sizes), colors, pose() = idle/walk stance, attack() = punch poses, front() = effects.
 // Left = near arm (aN/eN), right = far arm (aF/eF). Angles: 0 = hangs down, + = forward, 3.14 = straight up.
 (() => {
@@ -38,19 +40,189 @@
   const SZ = 1.15;                                       // TITAN SIZE: 1 = old, 1.15 = a bit bigger, 1.3 = huge
   const sz = o => { const r = {}; for(const k in o) r[k] = {}; for(const k in o) for(const j in o[k]) r[k][j] = +(o[k][j] * SZ).toFixed(2); return r; };
 
+  // ---------- LOOK HELPERS (drawing only, no gameplay) ----------
+  const ORG = '#ff7a1a', ORG_HOT = '#ffc15a', MATTE = '#1b1d22', STEEL = '#5b6571', STEEL_D = '#39404a', STEEL_L = '#a3afbc', OUT = '#0b0f1c';
+  const cur = {f:null, ff:false, sN:null, sF:null};          // per-frame look state, filled in farFront() and read by torso() / front()
+  const OW = 1.5;                                          // outline width for the gear
+  const mixP = (a, b, k) => ({x:a.x + (b.x - a.x) * k, y:a.y + (b.y - a.y) * k});
+  // flat plate along the arm from k0 to k1 (half widths o0 -> o1), rounded corners. Reads as armor plating instead of a round tube.
+  const slab = (cx, P, k0, k1, o0, o1, col, out) => {
+    const a = P(k0, -o0), b = P(k1, -o1), c = P(k1, o1), d = P(k0, o0);
+    cx.lineJoin = 'round'; cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.lineTo(c.x, c.y); cx.lineTo(d.x, d.y); cx.closePath();
+    if(out){ cx.strokeStyle = OUT; cx.lineWidth = OW * 2 + 1.6; cx.stroke(); }
+    cx.strokeStyle = col; cx.lineWidth = 1.6; cx.stroke(); cx.fillStyle = col; cx.fill();
+  };
+  const cap = (cx, a, b, w, col, out) => { if(out) Body.capsule(cx, a, b, w + OW * 2, OUT); Body.capsule(cx, a, b, w, col); };
+
+  // what one gauntlet is doing right now. comp = hydraulics compressed (0..1), burst = turbo exhaust firing (0..1), glow = orange indicators (0..1)
+  function armState(f, arm, t){
+    const A = f.A || {}, st = {comp:0, burst:0, glow:.14 + .05 * Math.sin(t * 2)};
+    if(f.atk > 0){
+      const p = clamp(1 - f.atk / (A.time || .5), 0, 1), L = A.cl || 0;
+      if(!A.skill){
+        const P = COMBO[A.step || 0];
+        if(P.arm === arm){
+          st.comp = p < P.R ? clamp(p / (P.R * .8), 0, 1) : clamp(1 - (p - P.R) / .12, 0, 1);
+          st.burst = (p >= P.R && p < P.C + .2) ? clamp(1 - (p - P.R) / (P.C + .2 - P.R), 0, 1) : 0;
+          st.glow = Math.max(st.glow, st.comp * .6, st.burst, L * .8);
+        } else st.glow = .22;
+      } else if(A.skill === 'shockwave'){
+        if(arm === 'N'){ st.comp = p < .25 ? p / .25 : 0; st.burst = (p >= .25 && p < .5) ? 1 - (p - .25) / .25 : 0; st.glow = Math.max(.3, st.burst, st.comp * .6); }
+      } else if(A.skill === 'rush'){
+        st.comp = .3; st.burst = .6 + .2 * Math.sin(t * 40); st.glow = .9;
+      } else if(A.skill === 'quake'){
+        st.comp = p < .4 ? p / .4 : (p < .52 ? 1 : Math.max(0, 1 - (p - .52) / .1));
+        st.burst = (p >= .52 && p < .75) ? 1 - (p - .52) / .23 : 0; st.glow = Math.max(.25, st.comp * .5, st.burst);
+      }
+    }
+    if(f.charging && f.chg > 0) st.glow = Math.max(st.glow, .6 + .4 * clamp(A.cl || 0, 0, 1));
+    return st;
+  }
+
+  // One gauntlet along the forearm (el -> hand). Matte black bracer, steel knuckle block, hydraulic pistons on top (they compress while loading),
+  // a mini turbine near the elbow, an exhaust vent behind it (flame burst on release) and orange panels / indicators.
+  function gauntlet(cx, Arm, st, white, spin){
+    const el = Arm.el, hd = Arm.hand, dx = hd.x - el.x, dy = hd.y - el.y, len = Math.hypot(dx, dy) || 1;
+    const u = {x:dx / len, y:dy / len}, n = {x:u.y, y:-u.x};      // u = along the arm, n = "top" side
+    const W = 10.8 * SZ, R = 5.5 * SZ, kE = 1 + (R * .85) / len;   // width, hand radius, end of the knuckle block
+    const P = (k, o) => ({x:el.x + u.x * len * k + n.x * (o || 0), y:el.y + u.y * len * k + n.y * (o || 0)});
+    const c = col => white ? '#fff' : col, hot = st.glow > .55, g = st.glow;
+    const accent = white ? '#fff' : (hot ? ORG_HOT : (g > .3 ? '#ff8f2e' : ORG));
+
+    // turbo exhaust flame (behind the elbow, pushes the gauntlet forward)
+    if(st.burst > .02 && !white){
+      const b = st.burst, tip = P(-.2 - (.35 + .8 * b), 0), a = P(-.2, -W * .34), z = P(-.2, W * .34);
+      cx.fillStyle = 'rgba(255,120,30,' + (.85 * b) + ')'; cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(tip.x, tip.y); cx.lineTo(z.x, z.y); cx.closePath(); cx.fill();
+      const tip2 = P(-.2 - (.2 + .5 * b), 0), a2 = P(-.2, -W * .16), z2 = P(-.2, W * .16);
+      cx.fillStyle = 'rgba(255,240,200,' + (.9 * b) + ')'; cx.beginPath(); cx.moveTo(a2.x, a2.y); cx.lineTo(tip2.x, tip2.y); cx.lineTo(z2.x, z2.y); cx.closePath(); cx.fill();
+    }
+    // lower piston (thin) + upper piston (main), drawn under the bracer so the bracer reads as the heavy part
+    const rodEnd = .55 + .3 * (1 - st.comp);
+    cap(cx, P(.08, W * .5), P(.42, W * .5), 2.6 * SZ, c(STEEL_D), true); cap(cx, P(.4, W * .5), P(rodEnd - .08, W * .5), 1.5 * SZ, c(STEEL_L), false);
+    // main bracer
+    slab(cx, P, -.08, .78, W * .5, W * .4, c(MATTE), true);
+    // armor ridge highlight (top edge) so the matte plate has some shape
+    if(!white) cap(cx, P(.02, -W * .4), P(.72, -W * .34), 1.1, 'rgba(160,175,195,.3)', false);
+    // orange accent panel + indicator light
+    slab(cx, P, .5, .74, W * .05, W * .32, accent, false);
+    if(!white){ cap(cx, P(.54, W * .18), P(.7, W * .22), .9, 'rgba(0,0,0,.5)', false); }
+    // rear exhaust ring with vent slits
+    slab(cx, P, -.2, -.08, W * .4, W * .44, c(STEEL_D), true);
+    if(!white){ for(let i = -1; i <= 1; i++) cap(cx, P(-.15, i * W * .17 - 1), P(-.15, i * W * .17 + 1), 1.1, i === 0 && g > .3 ? accent : '#0b0f1c', false); }
+    // turbine: housing, spinning blades, glowing hub
+    const tc = P(.28, 0), tr = 3.9 * SZ;
+    cx.fillStyle = OUT; cx.beginPath(); cx.arc(tc.x, tc.y, tr + OW, 0, 7); cx.fill();
+    cx.fillStyle = c(STEEL_D); cx.beginPath(); cx.arc(tc.x, tc.y, tr, 0, 7); cx.fill();
+    if(!white){
+      cx.strokeStyle = STEEL_L; cx.lineWidth = 1; cx.lineCap = 'round';
+      for(let i = 0; i < 6; i++){ const a = spin + i * Math.PI / 3; cx.beginPath(); cx.moveTo(tc.x + Math.cos(a) * 1, tc.y + Math.sin(a) * 1); cx.lineTo(tc.x + Math.cos(a + .35) * (tr - .7), tc.y + Math.sin(a + .35) * (tr - .7)); cx.stroke(); }
+      cx.strokeStyle = accent; cx.lineWidth = 1; cx.beginPath(); cx.arc(tc.x, tc.y, tr - .2, 0, 7); cx.stroke();
+      cx.fillStyle = accent; cx.beginPath(); cx.arc(tc.x, tc.y, 1.15, 0, 7); cx.fill();
+    }
+    // wrist cuff + knuckle block (heavy steel) with orange band and studs
+    slab(cx, P, .74, kE, W * .5, W * .56, c(STEEL), true);
+    if(!white){
+      cap(cx, P(.8, -W * .5), P(.8, W * .5), 1.6, accent, false);
+      cap(cx, P(.84, -W * .42), P(kE - .04, -W * .46), 1, 'rgba(255,255,255,.22)', false);
+      const e = P(kE, 0);
+      for(let i = -1; i <= 1; i++){ const q = {x:e.x + n.x * i * W * .3 - u.x * 1.6, y:e.y + n.y * i * W * .3 - u.y * 1.6}; cx.fillStyle = OUT; cx.beginPath(); cx.arc(q.x, q.y, 1.9, 0, 7); cx.fill(); cx.fillStyle = st.burst > .1 ? ORG_HOT : STEEL_L; cx.beginPath(); cx.arc(q.x, q.y, 1.2, 0, 7); cx.fill(); }
+    }
+    // upper piston rod mount on top of the knuckle block (drawn last so it sits on the plate)
+    cap(cx, P(.1, -W * .5), P(.5, -W * .5), 3 * SZ, c(STEEL_D), true);
+    cap(cx, P(.46, -W * .5), P(rodEnd, -W * .5), 1.8 * SZ, c(STEEL_L), true);
+    if(!white){ const m = P(rodEnd, -W * .5); cx.fillStyle = accent; cx.beginPath(); cx.arc(m.x, m.y, 1.2, 0, 7); cx.fill(); }
+    // glow halo when the system is engaged
+    if(g > .45 && !white){
+      const h = P(.5, 0), gr = cx.createRadialGradient(h.x, h.y, 1, h.x, h.y, 13 * SZ);
+      gr.addColorStop(0, 'rgba(255,140,40,' + (.4 * g) + ')'); gr.addColorStop(1, 'rgba(255,120,20,0)');
+      cx.fillStyle = gr; cx.beginPath(); cx.arc(h.x, h.y, 13 * SZ, 0, 7); cx.fill();
+    }
+  }
+
+  // head: skin, short messy black hair, dark brown eyes, scars, relaxed smirk. Drawn over the default head + visor. a = head angle (0 = upright), face looks +x.
+  function drawHead(cx, S, P, white, ang){
+    const R = 5.8 * SZ, H = S.head;
+    cx.save(); cx.translate(H.x, H.y); cx.rotate(ang); cx.lineJoin = 'round'; cx.lineCap = 'round';
+    cx.fillStyle = OUT; cx.beginPath(); cx.arc(0, 0, R + 1.6, 0, 7); cx.fill();
+    cx.fillStyle = white ? '#fff' : P.head; cx.beginPath(); cx.arc(0, 0, R, 0, 7); cx.fill();
+    if(!white){
+      // ear
+      cx.fillStyle = '#c48a60'; cx.beginPath(); cx.arc(-.14 * R, .16 * R, .2 * R, 0, 7); cx.fill();
+      // jaw shade + stubble
+      cx.strokeStyle = 'rgba(120,80,50,.38)'; cx.lineWidth = 2.2; cx.beginPath(); cx.arc(0, 0, R * .8, .15, 1.55); cx.stroke();
+      // nose
+      cx.fillStyle = OUT; cx.beginPath(); cx.arc(R * .99, .16 * R, .15 * R + .8, 0, 7); cx.fill();
+      cx.fillStyle = P.head; cx.beginPath(); cx.arc(R * .99, .16 * R, .15 * R, 0, 7); cx.fill();
+      // eye (dark brown) + brow, relaxed
+      cx.fillStyle = '#f4eee6'; cx.beginPath(); cx.ellipse(.46 * R, -.04 * R, .24 * R, .17 * R, 0, 0, 7); cx.fill();
+      cx.fillStyle = '#4a2c1a'; cx.beginPath(); cx.arc(.52 * R, -.03 * R, .14 * R, 0, 7); cx.fill();
+      cx.fillStyle = '#120a06'; cx.beginPath(); cx.arc(.54 * R, -.03 * R, .07 * R, 0, 7); cx.fill();
+      cx.strokeStyle = '#16100c'; cx.lineWidth = 1.2; cx.beginPath(); cx.moveTo(.16 * R, -.24 * R); cx.lineTo(.72 * R, -.22 * R); cx.stroke();
+      cx.lineWidth = 1.1; cx.beginPath(); cx.moveTo(.2 * R, -.1 * R); cx.lineTo(.68 * R, -.1 * R); cx.stroke();        // lowered lid = calm, confident look
+      // scars: through the brow and across the cheek
+      cx.strokeStyle = '#c4665a'; cx.lineWidth = .9;
+      cx.beginPath(); cx.moveTo(.34 * R, -.46 * R); cx.lineTo(.5 * R, .1 * R); cx.stroke();
+      cx.lineWidth = .6; [-.3, -.05].forEach(y => { cx.beginPath(); cx.moveTo(.31 * R + (y + .3) * .2 * R, y * R); cx.lineTo(.5 * R + (y + .3) * .2 * R, (y + .02) * R); cx.stroke(); });
+      cx.lineWidth = .9; cx.strokeStyle = '#d0786a'; cx.beginPath(); cx.moveTo(.18 * R, .3 * R); cx.lineTo(.62 * R, .5 * R); cx.stroke();
+      // slight smirk
+      cx.strokeStyle = '#4e2a1f'; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(.4 * R, .55 * R); cx.quadraticCurveTo(.62 * R, .62 * R, .84 * R, .48 * R); cx.stroke();
+    }
+    // messy short hair: spiky cap over the top + back, hairline curves up over the forehead
+    cx.fillStyle = white ? '#fff' : '#0d0c10'; cx.strokeStyle = OUT; cx.lineWidth = .9;
+    cx.beginPath();
+    const N = 12, a0 = -1.05, a1 = -3.75;
+    for(let i = 0; i <= N; i++){
+      const a = a0 + (a1 - a0) * i / N, spike = (i % 2 ? 1.5 : .2) + ((i * 7) % 3) * .3, rr = R + .3 + spike * (i === 0 || i === N ? .3 : 1);
+      const x = Math.cos(a) * rr, y = Math.sin(a) * rr; i ? cx.lineTo(x, y) : cx.moveTo(x, y);
+    }
+    cx.quadraticCurveTo(.05 * R, -.5 * R, Math.cos(a0) * R * .96, Math.sin(a0) * R * .96);
+    cx.closePath(); cx.fill(); cx.stroke();
+    if(!white){ cx.strokeStyle = 'rgba(120,130,160,.35)'; cx.lineWidth = .7; cx.beginPath(); cx.arc(0, 0, R * .82, -2.3, -1.1); cx.stroke(); }   // faint hair sheen
+    cx.restore();
+  }
+
+  // black tactical pants details: reinforced knee pad (tiny orange trim) + cargo pocket with a strap
+  function kneePad(cx, leg, white){
+    const k = leg.knee, r = 4.6 * SZ;
+    cx.fillStyle = OUT; cx.beginPath(); cx.arc(k.x + 1, k.y, r + OW, 0, 7); cx.fill();
+    cx.fillStyle = white ? '#fff' : '#23262c'; cx.beginPath(); cx.arc(k.x + 1, k.y, r, 0, 7); cx.fill();
+    if(!white){ cx.strokeStyle = STEEL; cx.lineWidth = 1; cx.beginPath(); cx.arc(k.x + 1, k.y, r * .68, -2.2, 1.4); cx.stroke();
+      cx.strokeStyle = ORG; cx.lineWidth = 1.2; cx.lineCap = 'round'; cx.beginPath(); cx.arc(k.x + 1, k.y, r * .68, -1.0, -.1); cx.stroke(); }
+  }
+  function pocket(cx, leg, white){
+    if(white) return;
+    const h = leg.hip, k = leg.knee, m = mixP(h, k, .5), a = Math.atan2(k.y - h.y, k.x - h.x), th = 11.5 * SZ / 2;
+    cx.save(); cx.translate(m.x, m.y); cx.rotate(a);
+    cx.fillStyle = '#272a31'; cx.strokeStyle = OUT; cx.lineWidth = .9;
+    cx.beginPath(); cx.rect(-2.9 * SZ, -th + .6, 5.8 * SZ, 3.8 * SZ); cx.fill(); cx.stroke();              // cargo pocket on the front of the thigh
+    cx.strokeStyle = '#3d424b'; cx.lineWidth = .6; cx.beginPath(); cx.moveTo(-2.4 * SZ, -th + 1.7); cx.lineTo(2.4 * SZ, -th + 1.7); cx.stroke();   // flap seam
+    cx.strokeStyle = '#2f333a'; cx.lineWidth = 1.7; cx.beginPath(); cx.moveTo(4.2 * SZ, -th - .6); cx.lineTo(4.2 * SZ, th + .6); cx.stroke();        // strap around the thigh
+    cx.fillStyle = ORG; cx.fillRect(3.5 * SZ, -th + .6, 1.4 * SZ, 1.6);                                                                          // tiny orange buckle
+    cx.restore();
+  }
+
   Characters.art('titan', {
     // ragdoll sizes. torso w only sets neck height now (the torso is drawn by torso() below). Hitbox stays 30x52.
     // SZ = overall size (1 = old size). Every body size below and the drawn torso scale together, so the proportions stay the same.
-    body: sz({head:{r:5.8}, torso:{len:13, w:15}, uArm:{len:9, w:9.2}, fArm:{len:9, w:8.4}, hand:{r:5.5},
-              thigh:{len:10, w:9}, shin:{len:9.5, w:7.4}, foot:{len:9, w:4.6}}),
+    body: sz({head:{r:5.8}, torso:{len:13, w:15}, uArm:{len:9, w:11.2}, fArm:{len:9, w:9.4}, hand:{r:5.5},
+              thigh:{len:10, w:10.4}, shin:{len:9.5, w:8.4}, foot:{len:9, w:4.6}}),
     // skin for torso/arms, dark trousers for legs (legs / legsFar), dark boots
-    colors: {shirt:'#d29a6e', limb:'#c48a60', far:'#9a6642', head:'#dba577', dark:'#1f2227', hand:'#6b7684', legs:'#3a3f47', legsFar:'#2c3037'},
+    colors: {shirt:'#d29a6e', limb:'#c48a60', far:'#9a6642', head:'#dba577', dark:'#14161a', hand:'#1b1d22', legs:'#1c1e23', legsFar:'#121418'},   // skin for the upper body, black tactical pants + boots, gauntlets are drawn on top
 
-    // when the RIGHT (far) arm punches, draw it over the body so it is visible
-    farFront: f => f.atk > 0 && COMBO[(f.A && f.A.step) || 0].arm === 'F',
+    // the far (right) arm is ALWAYS drawn first, behind the chest, also while it punches, so it never starts in the armpit.
+    // (this hook runs once per frame before the body is drawn, so it also prepares the gauntlet state)
+    farFront: f => {
+      const t = performance.now() / 1000, sN = armState(f, 'N', t), sF = armState(f, 'F', t);
+      const dt = f.gT ? clamp(t - f.gT, 0, .05) : 0; f.gT = t; f.gSpin = (f.gSpin || 0) + dt * (3 + 34 * Math.max(sN.glow, sF.glow));   // turbines spin faster when engaged
+      cur.f = f; cur.ff = false; cur.sN = sN; cur.sF = sF;
+      return false;
+    },
 
     // bodybuilder torso: narrow waist, wide back (lats), big chest, deltoid caps, thick neck. Drawn in torso space (a = up, b = forward).
     torso(cx, S, B, P, white){
+      // far leg gear + far gauntlet (far arm was just drawn, so put the gear on it now; when the far arm punches it is drawn later in front())
+      pocket(cx, S.lF, white); kneePad(cx, S.lF, white);
+      if(cur.f && !cur.ff) gauntlet(cx, S.aF, cur.sF, white, cur.f.gSpin || 0);
       const l = S.lean, ux = Math.sin(l), uy = -Math.cos(l), fx = Math.cos(l), fy = Math.sin(l);
       const pt = (a, b) => ({x:S.pel.x + (ux * a + fx * b) * SZ, y:S.pel.y + (uy * a + fy * b) * SZ});
       const skin = white ? '#fff' : P.shirt, shade = white ? '#fff' : '#a8704a', OUT = B.outline;
@@ -77,6 +249,28 @@
       // deltoid caps (shoulders): far one first, near one on top
       const delt = (A, r, c) => { cx.beginPath(); cx.arc(A.s.x, A.s.y, r, 0, 7); cx.fillStyle = c; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW; cx.stroke(); };
       delt(S.aF, 6.2 * SZ, white ? '#fff' : P.far); delt(S.aN, 7 * SZ, white ? '#fff' : '#e0a97c');
+      if(!white){   // trapezius slope + chest highlight = heavier powerlifter upper body
+        const tr = [pt(12.5,-3.2), pt(14.2,-6.2), pt(15.4,-2), pt(14.4,2.4), pt(12.2,3)];
+        blob(tr); cx.fillStyle = skin; cx.fill();
+        cx.strokeStyle = 'rgba(255,225,190,.35)'; cx.lineWidth = 1.2; const a = pt(12.6, 2.4), m = pt(11.2, 5.4), e = pt(12.8, 8.2);
+        cx.beginPath(); cx.moveTo(a.x, a.y); cx.quadraticCurveTo(m.x, m.y, e.x, e.y); cx.stroke();
+      }
+    },
+
+    // heavy-duty combat boot (replaces the default foot): thick black shaft over the pants + chunky foot, one thin orange trim line
+    foot(cx, leg, P, white, f, far){
+      const w = 5.3 * 1.25, len = 9 * SZ, planted = leg.planted, phi = planted ? 0 : clamp(-leg.sa * .5, -.8, .8);
+      const lift = planted ? clamp((leg.hip.x - leg.ankle.x - 2) * .12, 0, 3.5) : 0, col = white ? '#fff' : (far ? '#0d0e11' : '#15171b');
+      const a = {x:leg.ankle.x - 1.5, y:leg.ankle.y - lift}, b = {x:leg.ankle.x + (len - 1.5) * Math.cos(phi), y:leg.ankle.y + (len - 1.5) * Math.sin(phi)};
+      const top = mixP(leg.ankle, leg.knee, .3);
+      Body.capsule(cx, a, b, w + OW * 2, OUT); Body.capsule(cx, a, top, 8.2 + OW * 2, OUT);
+      Body.capsule(cx, a, b, w, col); Body.capsule(cx, a, top, 8.2, col);
+      if(!white){
+        Body.capsule(cx, {x:a.x + 1, y:a.y + w * .38}, {x:b.x, y:b.y + w * .38}, 1.3, '#2e3138');                      // sole line
+        Body.capsule(cx, {x:b.x - 2.4, y:b.y - .6}, {x:b.x, y:b.y - .2}, w * .8, '#23262c');                           // toe cap
+        const q = mixP(leg.ankle, leg.knee, .26), nx = leg.knee.y - leg.ankle.y, ny = -(leg.knee.x - leg.ankle.x), nl = Math.hypot(nx, ny) || 1;
+        Body.capsule(cx, {x:q.x - nx / nl * 3.9, y:q.y - ny / nl * 3.9}, {x:q.x + nx / nl * 3.9, y:q.y + ny / nl * 3.9}, 1, ORG);     // thin orange trim at the boot top
+      }
     },
 
     // heavy stance: feet wide apart on both sides of the hips (front foot ahead, back foot behind), knees bent, chest up with a slight forward lean,
@@ -144,7 +338,14 @@
     },
 
     // charge meter above the head while holding ATK
-    front(cx, f, t, S){
+    front(cx, f, t, S, P){
+      const white = f.flash > 0;
+      pocket(cx, S.lN, white); kneePad(cx, S.lN, white);                                                // near leg gear
+      drawHead(cx, S, P, white, S.lean + ((f.rig && f.rig.j.head.a) || 0));                              // face + hair over the default head
+      if(cur.f === f){
+        if(cur.ff) gauntlet(cx, S.aF, cur.sF, white, f.gSpin || 0);                                      // far arm punching: it is in front of the body now
+        gauntlet(cx, S.aN, cur.sN, white, f.gSpin || 0);                                                 // near gauntlet always on top
+      }
       if(!f.charging || !(f.chg > 0)) return;
       const r = clamp(f.chg / ((f.A && f.A.chargeMax) || 1), 0, 1), x = S.head.x - 11 * SZ, y = S.head.y - 12 * SZ, full = r >= 1;
       cx.fillStyle = 'rgba(0,0,0,.65)'; cx.fillRect(x - 1, y - 1, 24, 5);

@@ -1,1 +1,1 @@
-Characters.add({id:'nethros', name:'NETHROS', role:'Ranged', color:'#7a3cff', tag:'The Eternal Dread', hp:170, arm:2, spd:4.4, ult:'ETERNAL DREAD'});
+Characters.add({id:'nethros', name:'NETHROS', role:'Ranged', color:'#8c8c94', tag:'The Eternal Dread', hp:170, arm:2, spd:4.4, ult:'ETERNAL DREAD'});

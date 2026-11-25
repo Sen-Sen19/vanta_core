@@ -2,12 +2,14 @@
 // ---- ARENA ----
 // World size. Smaller world = everything looks bigger on screen (fighters stay the same size in the world).
 // Was 1280x720. 880x495 = about 1.45x bigger. Want bigger still? Lower both (keep 16:9). Smaller = bigger on screen.
-const W = 880, H = 495, GRAV = 2300;
+let W = 880, H = 495; const GRAV = 2300;   // W / H are set per match by setWorld(): bigger teams get a bigger world (more room, fighters look smaller)
+function setWorld(n){ const k = n >= 3 ? 1.35 : n === 2 ? 1.15 : 1; W = Math.round(880 * k); H = Math.round(495 * k); }
 const cv = $('#cv'), cx = cv.getContext('2d');
 let G = null, raf = 0;
 const view = {s:1, ox:0, oy:0, w:0, h:0, dpr:1};
 const LV = {Easy:{r:.45, atk:.25, chase:.6, jump:.2}, Normal:{r:.25, atk:.5, chase:.85, jump:.4}, Hard:{r:.12, atk:.8, chase:1, jump:.6}};
 const approach = (v, t, a) => v < t ? Math.min(v + a, t) : Math.max(v - a, t);
+const lerp = (a, b, t) => a + (b - a) * t;
 
 function fit(){
   const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 1.5);   // cap the pixel ratio: phones report 3+ = 4x the pixels to draw = lag
@@ -17,14 +19,19 @@ function fit(){
   view.ox = (r.width - W * view.s) / 2; view.oy = (r.height - H * view.s) / 2;
 }
 
-// random floating platforms: one main island + up to 4 random jump-on platforms
-function makeMap(){
-  const P = [{x:W/2 - 240, y:Math.round(H * .68), w:480, h:20, main:1}];
-  for(let t = 0; P.length < 5 && t < 200; t++){
-    // 85-210 px above the main island = reachable with a jump / double jump
-    const w = 110 + Math.random() * 110, x = 60 + Math.random() * (W - 120 - w), y = P[0].y - 85 - Math.random() * 125;
-    if(P.every(q => x + w + 50 < q.x || x > q.x + q.w + 50 || Math.abs(y - q.y) > 85)) P.push({x, y, w, h:16});
-  }
+// random floating platforms: one main island + floaters in two height tiers (105 / 210 px above the main island = reachable with a jump / double jump).
+// Each tier is split into equal slots with one platform per slot, so they always fit and never touch. Bigger teams = longer main island + more floaters (4 / 6 / 8).
+function makeMap(n = 1){
+  const mw = 500 + (n - 1) * 80, my = Math.round(H * .68);
+  const P = [{x:W/2 - mw / 2, y:my, w:mw, h:20, main:1}];
+  const F = 4 + (n - 1) * 2, tiers = [Math.ceil(F / 2), Math.floor(F / 2)];
+  tiers.forEach((cnt, ti) => {
+    const sw = (W - 120) / cnt, y0 = my - 105 * (ti + 1);
+    for(let i = 0; i < cnt; i++){
+      const w = Math.min(110 + Math.random() * 90, sw - 80);
+      P.push({x:60 + i * sw + 40 + Math.random() * (sw - w - 80), y:Math.round(y0 + (Math.random() - .5) * 20), w, h:16});
+    }
+  });
   return P;
 }
 
@@ -32,13 +39,13 @@ function mkF(c, idx, team = idx ? 1 : 0){   // idx = index in G.f (unique), team
   const K = Characters.skillsOf(c.id);   // K.skills = [skill I, skill II], K.ultimate, K.passive (see characters/titan/skills.js)
   return {c, idx, K, A:K.basic,
     sk:K.skills.map(d => ({cd:Array(d.charges || 1).fill(0)})),   // skill cooldowns: one timer per charge (each charge recharges on its own)
-    uc:0, pn:0, pt:0, bar:0, mag:0, rl:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0, snipe:null, snCd:0, snLock:false, lob:null, mo:0, moT:0, mbT:0, ns:null, ge:null, fc:null, fl:null, rec:0, fs:0, fsRdy:false, fsKey:0, fsGain:0, frz:0, rootT:0, lowG:0, ice:null,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
+    uc:0, pn:0, pt:0, bar:0, mag:0, rl:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0, snipe:null, snCd:0, snLock:false, lob:null, mo:0, moT:0, mbT:0, ns:null, ge:null, fc:null, fl:null, rec:0, fs:0, fsRdy:false, fsKey:0, fsGain:0, frz:0, rootT:0, lowG:0, ice:null, skeletons:[], descent:null, damnedDone:false,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
     team, dead:false, tgt:null, cs:0, comboT:0, aqB:0, w:30, h:52, x:0, y:0, vx:0, vy:0, face: team ? -1 : 1, hp:c.hp, max:c.hp, stocks:3,
     jumps:2, gr:false, atk:0, atkCd:0, hitDone:true, stun:0, inv:0, drop:0, flash:0,
     jq:false, dq:false, aq:false, in:{l:0, r:0}, aiT:0};
 }
 const SLOT_X = [130, 190, 70];   // spawn distance from the center for the 1st / 2nd / 3rd fighter of a team
-function place(f){ const s = G.f.filter(q => q.team === f.team && q.idx < f.idx).length; f.x = W/2 + (f.team ? 1 : -1) * SLOT_X[s]; f.tslot = s; f.y = G.P[0].y; f.vx = f.vy = 0; f.gr = true; f.jumps = 2; }
+function place(f){ const s = G.f.filter(q => q.team === f.team && q.idx < f.idx).length; f.x = W/2 + (f.team ? 1 : -1) * SLOT_X[s] * (W / 880); f.tslot = s; f.y = G.P[0].y; f.vx = f.vy = 0; f.gr = true; f.jumps = 2; }
 
 // TEAMS: G.f = [you, ...your bot allies, the opponent, ...its bot allies]. team 0 = your side, team 1 = the other side. idx = index in G.f.
 // foeOf(f) = the enemy f is currently fighting (the nearest living one; locked/captured targets are kept). Skills, bots, art.js all take it as `o`.
@@ -54,7 +61,8 @@ function foeOf(f){
   return f.tgt = best;
 }
 function startMatch(cfg){
-  G = {cfg, mode:cfg.mode, P:makeMap(), t:0, paused:false, last:performance.now(), over:null, parts:[], pops:[], rings:[], waves:[], slaughterFx:[], puddles:[], iceZ:[], errZ:[], cuts:[], shake:0,
+  setWorld(cfg.size || 1);
+  G = {cfg, mode:cfg.mode, P:makeMap(cfg.size || 1), t:0, paused:false, last:performance.now(), over:null, parts:[], pops:[], rings:[], waves:[], slaughterFx:[], puddles:[], iceZ:[], errZ:[], sov:null, cuts:[], shake:0,
        stars:Array.from({length:50}, () => ({x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.6+.4}))};
   const n = cfg.size || 1, mates = cfg.allies || [], foes = cfg.foes || [];
   G.f = [mkF(cfg.player, 0, 0)];
@@ -104,7 +112,7 @@ function falseExistence(o, src, f){
   burst(nx, ny, 18);                                             // he steps out of the dark
   return true;
 }
-const armOf = o => o.c.arm - (o.arE > 0 ? o.arAmt : 0);   // armor, minus the Heaven's Verdict debuff (can go negative = takes MORE damage)
+const armOf = o => o.c.arm - (o.arE > 0 ? o.arAmt : 0) - (o.dread ? o.dread.arm : 0);   // armor, minus the Heaven's Verdict debuff (can go negative = takes MORE damage)
 let LASTDMG = 0;   // damage of the hit that just landed (Fulminar's Static Charge bonus reads it)
 const KB = {x:450, y:-340, stun:.26};   // knockback tuning (horizontal speed, upward speed, stun seconds)
 function hurt(o, f){
@@ -112,6 +120,7 @@ function hurt(o, f){
   if(o.aegis && o.aegis.on && s0 !== o && f.face === -o.face){ blockHit(o, f); return; }   // AEGIS STANCE planted: a blow coming from the front is blocked (nothing lands: no damage, no knockback, no stun)
   if(s0 && o.K.passive && (o.K.passive.kind === 'falseExistence' || o.K.passive.kind === 'errorCorrection') && falseExistence(o, s0, f)) return;   // hit an illusion: no damage, no knockback, nothing lands
   let dmg = f.A.fixed != null ? f.A.fixed * (s0 && s0.mbT > 0 && s0.K.passive && s0.K.passive.kind === 'momentum' ? 1 + s0.K.passive.atk : 1) : (10 + f.c.hp / 40) * 2.2 * (1 - armOf(o) / 50) * f.A.dmg * (f.A.bleedBonus && o.bl > 0 ? f.A.bleedBonus : 1), shown = Math.round(dmg);   // A.fixed = a flat number (Final Curtain beast): no armor, but the Show Must Go On buff still counts   // bleedBonus = extra damage vs a bleeding (Wounded) enemy
+  if(s0 && s0 !== o && s0.K.passive && s0.K.passive.kind === 'execute'){ const xb = executeBonus(o, s0.K.passive); if(xb > 0){ dmg *= 1 + xb; shown = Math.round(dmg); if(xb >= .1) for(let i = 0; i < 5; i++) G.parts.push({x:o.x + (Math.random() - .5) * 18, y:o.y - Math.random() * o.h, vx:(Math.random() - .5) * 200, vy:-60 - Math.random() * 120, life:.4, col:'#c0102a'}); } }   // DEATH'S EMBRACE (Nethros): more damage the lower the enemy HP is (every damage source goes through hurt)
   if(o.mbT > 0 && o.K.passive && o.K.passive.kind === 'momentum'){ dmg *= 1 - o.K.passive.def; shown = Math.round(dmg); }   // Performance buff: takes less damage
   if(o.bar > 0){ const ab = Math.min(o.bar, dmg); o.bar -= ab; dmg -= ab; shown = dmg > 0 ? Math.round(dmg) : 'BLOCK'; }   // barrier soaks damage first
   o.hp -= dmg;
@@ -125,8 +134,64 @@ function hurt(o, f){
   const src = f.src || (f.K ? f : null); if(src) onLanded(src, o, f.A);   // passives react to every landed hit (see onLanded)
   if(o.hp <= 0) ko(o);
 }
+// ---- DREAD RITUAL (Nethros held key): HOLD ATK for hold.after s = it ACTIVATES (you can let go after that). hold:{kind:'ritual', after, cast, dur, speed, radius, r0, fearEvery, fearChance, fearDur, armMax, armRamp, leaveGrace, cd, cancelCd} in skills.js ----
+// f.rit = {t, d, r (aura radius now), k (0..1 how far it has grown), a (0..1 smoke strength, fades in / out), cast (true while he is still casting)}.
+// CAST (d.cast s): he floats slowly (d.speed x), cannot attack, the smoke aura grows from d.r0 to d.radius. A hit / stun during the cast stops it.
+// After the cast the aura STAYS on him until d.dur s have passed since the start (he moves and fights normally, a hit does not remove it). Then it fades and d.cd starts.
+// Enemies inside the aura: FEAR is only a CHANCE: every d.fearEvery s inside, d.fearChance to get scared = they walk away from him for d.fearDur s (e.fear > 0, e.fearDir), then they act normally again even if still inside.
+// + ARMOR DOWN that grows with time inside (e.dread.arm, up to d.armMax after d.armRamp s); it resets when they leave (or the aura ends).
+// The smoke does not go under the floor: while he stands on a platform only enemies at his level or above him are inside the aura (art.js clips the smoke at his feet the same way).
+function ritualEnd(f, natural){
+  const d = f.K && f.K.hold;
+  f.rit = null; foesOf(f).forEach(e => { e.fear = 0; e.dread = null; });
+  if(d && d.kind === 'ritual') f.ritCd = natural ? (d.cd || 0) : (d.cancelCd || 0);
+  if(f.A && f.A.skill === 'ritual'){ f.atk = 0; f.A = f.base || f.K.basic; f.atkCd = Math.max(f.atkCd, .25); }
+}
+function ritualStep(f, dt){
+  const d = f.K.hold, R = f.rit;
+  f.heldT = f.in.held ? (f.heldT || 0) + dt : 0;
+  if(!f.in.held) f.ritLock = false;                                  // a new hold is needed to start it again
+  if(f.ritCd > 0) f.ritCd -= dt;
+  if(R){
+    if(f.stun > 0 && R.cast || f.capturedBy != null || f.onsl || f.slaughter || f.frz > 0 || (R.cast && (!f.A || f.A.skill !== 'ritual'))){ ritualEnd(f, false); return; }   // hit / caught while casting = the ritual stops. Once the cast is done, the aura stays.
+    R.t += dt;
+    if(R.cast && R.t >= d.cast){ R.cast = false; f.atk = 0; f.A = f.base || f.K.basic; f.atkCd = Math.max(f.atkCd, .2); }   // cast finished: he is free again, the aura stays
+    if(R.t >= d.dur){ ritualEnd(f, true); return; }                  // 5 s are over
+    R.k = smooth(clampN(R.t / d.cast, 0, 1)); R.r = d.r0 + (d.radius - d.r0) * R.k;
+    R.a = Math.min(1, R.t / .35, (d.dur - R.t) / .8);                // smoke fades in at the start and out at the end
+    if(R.cast){ f.atk = f.A.time; f.atkCd = Math.max(f.atkCd, .25); }
+    const cxp = f.x, cyp = f.y - f.h / 2, gr = d.leaveGrace || .12;
+    foesOf(f).forEach(e => {
+      const inside = !e.dead && e.inv <= .2 && e.capturedBy == null && Math.hypot(e.x - cxp, (e.y - e.h / 2) - cyp) <= R.r && !(f.gr && e.y - e.h / 2 > f.y + 4);   // standing on a platform: nothing "under" the platform counts
+      if(inside){
+        const S = e.dread || (e.dread = {t:0, arm:0, out:0, roll:d.fearEvery * Math.random()}); S.t += dt; S.out = 0; S.arm = d.armMax * Math.min(1, S.t / d.armRamp);   // armor goes down the longer they stay
+        S.roll -= dt;
+        if(S.roll <= 0){ S.roll = d.fearEvery;                                                      // a fear roll: only a chance, and never while they are already scared
+          if(!(e.fear > 0) && Math.random() < d.fearChance){ e.fear = d.fearDur; e.fearDir = Math.sign(e.x - f.x) || 1; G.pops.push({x:e.x, y:e.y - e.h - 22, txt:'FEAR', life:.7}); }
+        }
+      }else if(e.dread){ e.dread.out += dt; if(e.dread.out > gr) e.dread = null; }               // left the aura: armor is back
+    });
+    return;
+  }
+  if(f.in.held && !f.ritLock && !(f.ritCd > 0) && f.heldT >= d.after && f.gr && f.stun <= 0 && !(f.frz > 0) && !f.slaughter && !f.hk && !f.rush && !f.sc && f.capturedBy == null && (f.atk <= 0 || (!f.A.skill && !f.hitDone))){
+    startSkillA(f, skillA(d, {time:d.cast + 1, cd:.25, root:false, noSlash:true, step:0}));
+    f.rit = {t:0, d, r:d.r0, k:0, a:0, cast:true}; f.ritLock = true; f.comboT = 0; f.aqB = 0; f.charging = false; f.chg = 0;
+    G.rings.push({x:f.x, y:f.y - f.h / 2, life:.25});
+  }
+}
+// DEATH'S EMBRACE (Nethros passive): bonus damage vs the enemy's CURRENT HP share. skills.js passive.curve = [[hp share, bonus], ...] from full HP down to low HP; between two points it is a straight line;
+// at or below the last point = that last bonus; full HP = 0. passive.cap = the highest bonus allowed. Each enemy is looked at on its own (o.hp / o.max).
+function executeBonus(o, P){
+  const r = clampN(o.hp / o.max, 0, 1), C = P.curve; if(!C || !C.length) return 0;
+  if(r >= C[0][0]) return C[0][1];
+  for(let i = 1; i < C.length; i++){ if(r >= C[i][0]){ const a = C[i - 1], b = C[i]; return Math.min(P.cap, a[1] + (b[1] - a[1]) * (a[0] - r) / (a[0] - b[0])); } }
+  return Math.min(P.cap, C[C.length - 1][1]);
+}
 function ko(f){
   if(G.over || f.dead) return;
+  if(G.sov && G.sov.src === f) endSysOv();   // Errata is KO'd: the override ends right away
+  if(f.rit) ritualEnd(f); f.fear = 0; f.dread = null;
+  f.pq = null; f.mp = null; f.paint = null; f.trail = []; if(f.roller) rollerEnd(f);   // Miette: stacks gone, her paint trail is wiped
   if(f.fc) fcRestore(f);   // Final Curtain: give him his own body and HP back before the reset
   // If either fighter is KO'd during a capture, release the other fighter and cancel the execution cleanly.
   G.f.forEach(q => {
@@ -150,7 +215,7 @@ function ko(f){
       }
     }
   }
-  f.mag = 0; f.rl = 0; f.hp = f.max; f.x = W/2; f.y = -40; f.vx = f.vy = 0; f.jumps = 2; f.inv = 1.6; f.stun = 0; f.atk = 0; f.gr = false; f.rush = null; f.bar = 0; f.pt = 0; f.pn = 0; f.hk = null; f.slaughter = null; f.capturedBy = null; f.mk = 0; f.bl = 0; f.stench = null; f.slowT = 0; f.vomit = null; f.heldT = 0; f.fe = 0; f.feKey = null; f.shd = null; f.shadows = []; f.onsl = null; f.fr = 0; f.hLast = 0; f.dv = 0; f.dvKey = null; f.vclaw = null; f.uhand = null; f.afterimg = null; f.slam = null; f.kdT = 0; f.slowVoidT = 0; f.holy = null; f.impacted = false; f.slowHolyT = 0; f.sc = null; f.aegis = null; f.arE = 0; f.snipe = null; f.snCd = 0; f.snLock = false; f.lob = null; f.fs = 0; f.fsRdy = false; f.frz = 0; f.rootT = 0; f.lowG = 0; f.ice = null; f.mo = 0; f.moT = 0; f.mbT = 0; f.ns = null; f.ge = null; f.fl = null; f.rec = 0; f.stc = 0; f.stLast = 0; f.ls = null; f.sky = null; f.storm = null;
+  f.mag = 0; f.rl = 0; f.hp = f.max; f.x = W/2; f.y = -40; f.vx = f.vy = 0; f.jumps = 2; f.inv = 1.6; f.stun = 0; f.atk = 0; f.gr = false; f.rush = null; f.bar = 0; f.pt = 0; f.pn = 0; f.hk = null; f.slaughter = null; f.capturedBy = null; f.mk = 0; f.bl = 0; f.stench = null; f.slowT = 0; f.vomit = null; f.heldT = 0; f.ritCd = 0; f.ritLock = false; f.fe = 0; f.feKey = null; f.shd = null; f.shadows = []; f.onsl = null; f.fr = 0; f.hLast = 0; f.dv = 0; f.dvKey = null; f.vclaw = null; f.uhand = null; f.afterimg = null; f.slam = null; f.kdT = 0; f.slowVoidT = 0; f.holy = null; f.impacted = false; f.slowHolyT = 0; f.sc = null; f.aegis = null; f.arE = 0; f.snipe = null; f.snCd = 0; f.snLock = false; f.lob = null; f.fs = 0; f.fsRdy = false; f.frz = 0; f.rootT = 0; f.lowG = 0; f.ice = null; f.mo = 0; f.moT = 0; f.mbT = 0; f.ns = null; f.ge = null; f.fl = null; f.rec = 0; f.stc = 0; f.stLast = 0; f.ls = null; f.sky = null; f.storm = null; f.re = null; f.br = null; f.skeletons = []; f.descent = null; f.damnedDone = false;
   if(f.dead){ f.x = -5000; f.y = -5000; f.hp = 0; f.inv = 999; f.stun = 0; }   // eliminated: parked off-screen, skipped by everything
 }
 
@@ -311,10 +376,52 @@ const SKILLS = {
     startSkillA(f, skillA(d, {time:d.dist / d.speed + .2}));
     f.rush = {dir:f.face, left:d.dist, spd:d.speed, d};
   },
+  // GRAVEBOUND HANDS (Nethros I): no aim, straight ahead. He raises both arms (d.time s, rooted); at d.at (0..1 of the cast) the horde of hands crawls out of the floor in front of him. See graveSpawn / stepHands.
+  gravebound(f, o, d){
+    startSkillA(f, skillA(d, {time:d.time, root:true, at:d.at, gb:d}));
+    f.gbDone = false;
+  },
+  // RISE OF THE DAMNED (Nethros II): no aim. Summons 3 skeleton warriors from ground surrounding him (Swordsman, Spearman, Axeman).
+  damned(f, o, d){
+    startSkillA(f, skillA(d, {time:d.time || .5, root:true, at:d.at || .35, gb:d}));
+    f.damnedDone = false;
+  },
+  // FALLEN DESCENT (Nethros Ultimate): launches high into the air, invulnerable, descends like a fallen angel, crashes with massive dark shockwave.
+  fallendescent(f, o, d){
+    const T_up = d.ascend || .4, T_van = d.vanish || .35, T_down = d.descend || .4, T_rec = d.recover || .45;
+    const total = T_up + T_van + T_down + T_rec;
+    startSkillA(f, skillA(d, {time:total, cd:total, root:true, f0:T_up / total, f1:(T_up + T_van) / total, f2:(T_up + T_van + T_down) / total}));
+    const pl = platUnder(f) || G.P.filter(p => f.x >= p.x - 10 && f.x <= p.x + p.w + 10).sort((a,b) => b.y - a.y)[0] || G.P[0];
+    const gy = pl ? pl.y : (groundAt(f.x, -9999) || G.P[0].y);
+    f.descent = {t:0, d, total, x0:f.x, y0:f.y, gy, tx:f.x, ph:'ascend', T_up, T_van, T_down, T_rec, impacted:false, hid:++HID};
+    f.inv = Math.max(f.inv, total);
+    G.rings.push({x:f.x, y:f.y - 10, life:.3});
+    for(let i = 0; i < 18; i++) G.parts.push({x:f.x + (Math.random() - .5) * 30, y:f.y - Math.random() * 20, vx:(Math.random() - .5) * 300, vy:-200 - Math.random() * 400, life:.5, col:'#7e22ce'});
+  },
   // QUAKE (Total Extinction): short wind-up (arms up, slam), then ONE big area hit around him at d.at (0..1 of the wind-up). Hurt during the wind-up = it is interrupted.
   quake(f, o, d){
     startSkillA(f, skillA(d, {time:d.windup || .8, root:true}));
     f.quaked = false;
+  },
+  // COLORFUL SWEEP (Miette skill I): no aim. She spins 360 (rooted, d.time s); at d.at (0..1 of the swing) sweepHit() bursts paint around her. A hit on her during the swing cancels it.
+  colorsweep(f, o, d){
+    startSkillA(f, skillA(d, {time:d.time || .55, root:true, sw:d}));
+    f.swept = false;
+  },
+  // PAINTQUAKE (Miette skill II): aimed ground spot (groundAim). Stomp d.stomp s, hop there along an arc, smash for d.land s; the paint burst (d.radius) lands at the impact. See pqStep.
+  paintquake(f, o, d, ax, ay, m){
+    const g = groundAim(f, o, d, ax, ay, m); if(!g) return;
+    f.face = Math.sign(g.x - f.x) || f.face;
+    const dist = Math.abs(g.x - f.x), T0 = d.stomp || .18, T1 = clampN(.3 + dist / 1000, .34, .62), T2 = d.land || .32, T = T0 + T1 + T2;
+    startSkillA(f, skillA(d, {time:T, cd:T, root:true, f0:T0 / T, f1:(T0 + T1) / T}));
+    f.pq = {t:0, d, x0:f.x, y0:f.y, x1:g.x, y1:g.y, T0, T1, T2, T, H:70 + dist * .15 + Math.max(0, g.y - f.y) * .3, up:false, hit:false};
+  },
+  // MASTERPIECE (Miette ultimate): she hops up (d.jump s), hovers and paints a giant symbol on the floor under her (d.paint s), then it explodes (see mpStep / mpBlast), then she drops back down (d.land s).
+  // Any hit on her before the explosion cancels it (cooldown becomes d.failCd). f.mp = {ph:'cast'|'fade', t, d, x, y0, ...}.
+  masterpiece(f, o, d){
+    const Tj = d.jump || .35, Tp = d.paint || 1.8, Tl = d.land || .3, T = Tj + Tp + Tl;
+    startSkillA(f, skillA(d, {time:T + .05, cd:T + .05, root:true, f0:Tj / T, f1:(Tj + Tp) / T}));
+    f.mp = {ph:'cast', t:0, d, x:f.x, y0:f.y, Tj, Tp, Tl, T, blasted:false, ft:0};
   },
   // MELEE (Cleaver's Kiss): a normal melee swing with its own numbers (time, hitFrom/hitTo = hit window, reach, step = which art.js attack pose to play). It lands through the same
   // hit box as basic attacks. bleedBonus = damage multiplier against a bleeding enemy. Hit = counts for the passive like any skill.
@@ -513,6 +620,25 @@ const SKILLS = {
     f.inv = Math.max(f.inv, d.dur + .1);
     G.rings.push({x:f.x, y:f.y - f.h / 2, life:.25}); G.waves.push({x:f.x, y:f.y - f.h / 2, r:60, life:.25, max:.25, col:'#7df3ff', fill:'#00e5ff'});
   },
+  // RECOIL ESCAPE (Caliber II): no aim. Short wind-up (d.wind s, rooted), then hops BACKWARD (negative lunge) and fires a burst of bullets behind him mid-air. At d.flipAt he flips to face forward (now facing his enemy). Lands normally. See recoilStep.
+  recoilescape(f, o, d){
+    const T = d.wind + .65;   // wind-up + rough air time (the actual air time is physics-driven)
+    startSkillA(f, skillA(d, {time:T, cd:T, root:false, lunge:-(d.dist || 320), lungeP:(d.wind || .18) / T, hop:(d.hop || 680)}));
+    f.re = {t:0, d, fired:0, flipped:false, total:T};
+    f.A.lunged = false;   // allow the hop + lunge to trigger
+    f.lunged = false;
+  },
+  // BULLET RAIN (Caliber ultimate): drag to aim a wide ground zone (groundAim). He fires a burst upward (cast s, rooted), then after a delay `d.delay` s dense shrapnel rains down in random order across the zone. See bulletRainStep.
+  bulletrain(f, o, d, ax, ay, m){
+    const g = groundAim(f, o, d, ax, ay, m); if(!g) return;
+    f.face = Math.sign(g.x - f.x) || f.face;
+    startSkillA(f, skillA(d, {time:d.cast, root:true}));
+    const n = d.bullets || 14, hw = d.halfW || 140, xs = [];
+    for(let i = 0; i < n; i++) xs.push(g.x - hw + (i + .5) / n * 2 * hw + (Math.random() - .5) * hw / n * 1.4);
+    for(let i = n - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [xs[i], xs[j]] = [xs[j], xs[i]]; }   // random order
+    const start = d.cast + (d.delay || .5);
+    f.br = {x:g.x, gy:g.y, t:0, d, hid:++HID, hits:xs.map((x, i) => ({x, at:start + i * (d.gap || .1), done:false})), total:start + n * (d.gap || .1) + .35};
+  },
   // SKYFALL (Fulminar II): drag to pick a ground spot. He raises a hand (`cast` s, the circle is marked on the ground), then `strikes` lightning bolts rain down over the circle one after another.
   skyfall(f, o, d, ax, ay, m){
     const g = groundAim(f, o, d, ax, ay, m); if(!g) return;
@@ -528,6 +654,14 @@ const SKILLS = {
     startSkillA(f, skillA(d, {time:d.cast, root:true}));
     f.storm = {t:0, d, hid:++HID, next:d.cast + .25, ph:0};
     G.pops.push({x:f.x, y:f.y - f.h - 34, txt:'STORM OF RUIN', life:1.1});
+  },
+  // SYSTEM OVERRIDE (Errata ultimate): d.cast s of casting (rooted, a hit fizzles it), then d.dur s of corrupted reality: scrambled enemy controls, false platforms,
+  // glitch teleports and a collapsing mirror dimension. See stepSysOv below (G.sov holds the whole state).
+  sysoverride(f, o, d){
+    startSkillA(f, skillA(d, {time:d.cast, root:true}));
+    const Z = G.sov = {src:f, d, t:0, age:0, ph:'cast', saved:[], fakes:[], swapT:0};
+    makeSovFx(Z);
+    G.pops.push({x:f.x, y:f.y - f.h - 34, txt:'SYSTEM OVERRIDE', life:1.1});
   },
   // HAND OF THE ABYSS (Umbra ultimate): see handStep.
   abysshand(f, o, d){
@@ -871,7 +1005,7 @@ function lightStep(f, o, dt){
   const dir = f.in.r - f.in.l, sp = f.c.spd * 52 * d.speed;
   if(dir){ f.face = dir; f.vx = approach(f.vx, dir * sp, 7000 * dt); } else f.vx = approach(f.vx, 0, 3500 * dt);
   f.atk = 0; f.charging = false; f.chg = 0; f.A = f.base || f.K.basic;
-  if(f.jq && f.jumps > 0){ f.vy = f.jumps === 2 ? -840 : -780; f.jumps--; f.gr = false; }
+  if(f.jq && f.jumps > 0){ f.vy = (f.jumps === 2 ? -840 : -780) * paintJump(f); f.jumps--; f.gr = false; }
   if(f.dq && f.gr){ f.drop = .22; f.y += 3; f.gr = false; }
   f.inv = Math.max(f.inv, .1);
   L.hitT -= dt;
@@ -886,6 +1020,51 @@ function endLightStep(f){
   f.ls = null; f.inv = Math.max(.15, 0); f.vx *= .4; f.A = f.base || f.K.basic;
   G.rings.push({x:f.x, y:f.y - f.h / 2, life:.25});
   for(let i = 0; i < 10; i++) G.parts.push({x:f.x, y:f.y - f.h / 2, vx:(Math.random() - .5) * 360, vy:(Math.random() - .5) * 360, life:.4, col:i % 2 ? '#00e5ff' : '#ffffff'});
+}
+// CALIBER SKILL II - RECOIL ESCAPE: wind-up, hop backward, fire burst mid-air, land facing the enemy.
+// The hop+lunge is handled by the main attack loop (hop + lunge on the lungeP moment). This step watches the air time
+// and fires bullets behind him (backward = -f.face) and flips him at d.flipAt (fraction of total time).
+function recoilStep(f, o, dt){
+  const C = f.re, d = C.d; C.t += dt;
+  if(C.t >= C.total || f.gr && C.t > (d.wind || .18) + .1){   // landed = done
+    f.re = null; return;
+  }
+  if(!f.gr) {
+    // face-flip: at flipAt of total time he spins and faces the enemy (now he is behind him)
+    if(!C.flipped && C.t >= (d.flipAt || .5) * C.total){
+      C.flipped = true; f.face = -f.face;
+    }
+    // fire burst: d.burst bullets evenly spaced between burstFrom..burstTo of total time
+    const n = d.burst || 4, from = (d.burstFrom || .2) * C.total, to = (d.burstTo || .85) * C.total;
+    while(C.fired < n){
+      const nextAt = from + (C.fired / (n - 1 || 1)) * (to - from);
+      if(C.t < nextAt) break;
+      C.fired++;
+      const s = d.shot || {r:4, speed:860, life:.8};
+      // bullets fire BACKWARD relative to current facing (he has NOT yet flipped if before flipAt)
+      const shotDir = C.flipped ? f.face : -f.face;
+      G.sh = G.sh || [];
+      G.sh.push({id:f.c.id, c:f.c, idx:f.idx, team:f.team, A:skillA(s, {hid:C.hid || (C.hid = ++HID), skill:'recoilescape'}), x:f.x, y:f.y - 28, vx:shotDir * (s.speed || 860), vy:0, r:s.r || 4, life:s.life || .8, age:0, kind:'re', cl:0});
+    }
+  }
+}
+// CALIBER ULTIMATE - BULLET RAIN: cast upward burst, then dense shrapnel falls across the aimed zone.
+// Each hit is a small bullet impact on the column above the x position (same column-hit logic as Skyfall).
+// Enemies inside can be hit by multiple impacts -- they just need to stay there.
+function bulletRainStep(f, o, dt){
+  const C = f.br, d = C.d; C.t += dt;
+  if(C.t < d.cast && f.stun > 0){ f.br = null; return; }   // hit during the upward burst: cancelled
+  C.hits.forEach(h => {
+    if(h.done || C.t < h.at) return; h.done = true;
+    const gy = groundAt(h.x, C.gy - 6) ?? C.gy;
+    // small puff particles for each impact
+    G.shake = Math.max(G.shake, .05);
+    for(let i = 0; i < 5; i++) G.parts.push({x:h.x + (Math.random() - .5) * 10, y:gy - 2, vx:(Math.random() - .5) * 220, vy:-Math.random() * 180, life:.35, col: i % 2 ? '#ffd27a' : '#ff8a2a'});
+    if(o && strikeHits(o, h.x, gy, d.strikeW) && o.y > gy - (d.height || 200)){
+      hurt(o, {c:f.c, A:skillA(d, {hid:C.hid, kbx:0, kby:d.kby, stunx:d.stunx, dmg:d.dmg, shake:d.shake || .8, hitstop:d.hitstop || .02, noShake:true}), face:Math.sign(o.x - h.x) || f.face, src:f});
+    }
+  });
+  if(C.t >= C.total) f.br = null;
 }
 // SKILL II SKYFALL: marked circle on the ground, then bolts land one after another across it (each hits the column above its spot: damage + a short stun).
 function skyStep(f, o, dt){
@@ -1023,6 +1202,9 @@ function handStep(f, o, dt){
 }
 // CAN[kind](f, o, d) = a skill that is only allowed to cast when this is true. If it is false the cast is cancelled and NO cooldown is used.
 const CAN = {
+  gravebound(f){ return !!f.gr && !!platUnder(f); },   // Nethros I: the hands crawl along the floor he stands on
+  damned(f){ return !!f.gr && !!platUnder(f); },       // Nethros II: summon skeletons from the ground
+  fallendescent(f){ return !f.descent; },               // Nethros Ultimate: dive (castable from ground or air)
   finalcurtain(f){ return !f.fc && !(f.rec > 0) && !f.fl; },
   grandentrance(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },
   wintergrasp(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },         // there must be ground at the chosen spot
@@ -1032,6 +1214,10 @@ const CAN = {
   iceage(f){ return !f.ice; },                                                         // one Ice Age at a time
   voidclaw(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },            // there must be ground at the chosen spot
   skyfall(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },
+  bulletrain(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },   // Caliber ultimate: a valid ground target
+  paintquake(f, o, d, ax, ay, m){ return !f.pq && !!groundAim(f, o, d, ax, ay, m); },   // there must be ground at the chosen spot
+  masterpiece(f){ return !f.mp && f.gr && groundAt(f.x, f.y) != null; },                 // she needs floor under her to paint on
+  sysoverride(f){ return !G.sov; },                                                     // one System Override at a time
   stormofruin(f){ return !f.storm; },                                                   // one storm at a time
   shadowstep(f, o, d, ax, ay, m){ return !!stepDest(f, o, d, ax, ay, m); },           // a valid, free spot
   abysshand(f, o, d){ return !!o && o.inv <= .2 && !o.slam && !o.capturedBy && !o.onsl && !o.slaughter && Math.hypot(o.x - f.x, o.y - f.y) <= (d.range || 300); },
@@ -1051,6 +1237,8 @@ function castSkill(f, o, q){
   if(f.fc || f.rec > 0 || f.fl) return;                       // Final Curtain: the beast has NO skills, and he cannot act while he recovers
   if(f.atk > 0 && f.A && f.A.skill === 'quake') return;      // the ultimate wind-up cannot be cancelled by another skill
   if(f.ice && f.ice.ph === 'cast') return;                    // neither can the Ice Age cast
+  if(f.mp && f.mp.ph === 'cast') return;                      // nor Masterpiece
+  if(G.sov && G.sov.src === f && G.sov.ph === 'cast') return;  // nor System Override
   if(f.rootT > 0 && (['rush', 'shadowstep', 'shadowhook', 'sacredcharge', 'lightningstep'].includes(d.kind) || (d.kind === 'replicate' && f.shadows.length))){ if(f === G.f[0]) G.pops.push({x:f.x, y:f.y - f.h - 14, txt:'TRAPPED', life:.7}); return; }   // Crystal Coffin: no dashes / teleports out of the ice
   let slot = 0;
   if(q.i < 2){ slot = f.sk[q.i].cd.findIndex(c => c <= 0); if(slot < 0) return; } else if(f.uc > 0) return;
@@ -1086,6 +1274,75 @@ function quakeHit(f, o){
   G.waves.push({x:mx, y:my, r:d.radius, life:.45, max:.45});
   for(let i = 0; i < 24; i++) G.parts.push({x:f.x + (Math.random() - .5) * 60, y:f.y, vx:(Math.random() - .5) * 700, vy:-Math.random() * 450, life:.5, col:'#b9b2a8'});
   if(o.inv <= 0 && Math.hypot(o.x - mx, (o.y - o.h / 2) - my) <= d.radius) hurt(o, {c:f.c, A:f.A, face:Math.sign(o.x - f.x) || f.face, src:f});
+}
+function paintBurst(f, d, mx, my){   // a circle of paint (d.radius) around (mx, my): every enemy inside = damage + knockback away from the centre + 1 Paint Stack (Sticky Situation). Used by Colorful Sweep + Paintquake.
+  G.shake = Math.max(G.shake, .2);
+  const P = f.K.passive, cols = ['#ff5fa2', '#2fd0c4', '#ffd23f'];
+  G.waves.push({x:mx, y:my, r:d.radius, life:.4, max:.4, col:'#ff5fa2', fill:'#ffd23f'});
+  for(let i = 0; i < 26; i++){ const a = Math.random() * 6.283, v = 160 + Math.random() * 260; G.parts.push({x:mx, y:my, vx:Math.cos(a) * v, vy:Math.sin(a) * v - 60, life:.45, col:cols[i % 3]}); }
+  foesOf(f).forEach(e => {
+    if(e.inv > 0 || Math.hypot(e.x - mx, (e.y - e.h / 2) - my) > d.radius) return;
+    const hp0 = e.hp + (e.bar || 0);
+    hurt(e, {c:f.c, A:f.A, face:Math.sign(e.x - mx) || f.face, src:f});
+    if(!e.dead && e.hp + (e.bar || 0) < hp0 && P && P.kind === 'paint') paintApply(e, P);   // it really landed (not blocked / dodged): +1 Paint Stack
+  });
+}
+function sweepHit(f, d){ f.swept = true; paintBurst(f, d, f.x, f.y - f.h / 2); }   // COLORFUL SWEEP: the burst is centred on her
+// PAINTQUAKE (Miette skill II): f.pq = {t, d, x0, y0, x1, y1, T0, T1, T2, T, H, up, hit}. stomp (T0) -> hop along an arc (T1) -> landing smash (T2) with the paint burst at the start of it.
+function pqEnd(f){ f.pq = null; if(f.A && f.A.skill === 'paintquake'){ f.atk = 0; f.A = f.base || f.K.basic; f.atkCd = Math.max(f.atkCd, .15); } }
+function pqStep(f, o, dt){
+  const Z = f.pq; Z.t += dt; f.vx = f.vy = 0;
+  if(Z.t < Z.T0){ f.gr = true; return; }                                           // the stomp wind-up: she stays planted
+  if(Z.t < Z.T0 + Z.T1){
+    if(!Z.up){ Z.up = true; G.shake = Math.max(G.shake, .12); G.rings.push({x:f.x, y:f.y - 4, life:.25}); for(let i = 0; i < 12; i++) G.parts.push({x:f.x + (Math.random() - .5) * 30, y:f.y, vx:(Math.random() - .5) * 420, vy:-Math.random() * 240, life:.4, col:['#ff5fa2', '#2fd0c4', '#ffd23f'][i % 3]}); }
+    const k = (Z.t - Z.T0) / Z.T1;
+    f.x = Z.x0 + (Z.x1 - Z.x0) * k; f.y = Z.y0 + (Z.y1 - Z.y0) * k - Z.H * 4 * k * (1 - k); f.gr = false;   // an arc to the spot
+    return;
+  }
+  if(!Z.hit){ Z.hit = true; f.x = Z.x1; f.y = Z.y1; f.gr = true; f.jumps = 2; G.hs = Math.max(G.hs || 0, .05); paintBurst(f, Z.d, f.x, f.y - 6); }   // the smash
+  if(Z.t >= Z.T) pqEnd(f);
+}
+// MASTERPIECE (Miette ultimate): f.mp = {ph, t, d, x, y0, Tj, Tp, Tl, T, blasted, ft}. 'cast' = jump up -> paint (symbol grows) -> BLAST (mpBlast) -> drop down. 'fade' = the symbol fades out (drawn only).
+function mpEnd(f, fail){
+  const Z = f.mp; if(!Z) return;
+  if(f.A && f.A.skill === 'masterpiece'){ f.atk = 0; f.A = f.base || f.K.basic; f.atkCd = Math.max(f.atkCd, .2); }
+  if(fail){   // hit before the explosion: the symbol is lost
+    f.uc = Z.d.failCd != null ? Z.d.failCd : f.uc;
+    G.pops.push({x:f.x, y:f.y - f.h - 22, txt:'INTERRUPTED', life:.8});
+    for(let i = 0; i < 16; i++) G.parts.push({x:Z.x + (Math.random() - .5) * 120, y:Z.y0 - 2, vx:(Math.random() - .5) * 260, vy:-Math.random() * 220, life:.4, col:PAINT_COLS[i % 3].c});
+    f.mp = null; return;
+  }
+  Z.ph = 'fade'; Z.ft = 0;
+}
+function mpBlast(f, Z){
+  const d = Z.d, cx0 = Z.x, cy0 = Z.y0 - 40, P = f.K.passive;
+  G.shake = Math.max(G.shake, .5); G.hs = Math.max(G.hs || 0, d.hitstop || .1);
+  G.waves.push({x:cx0, y:cy0, r:d.radius, life:.55, max:.55, col:'#ff5fa2', fill:'#ffd23f'});
+  G.waves.push({x:cx0, y:cy0, r:d.radius * .7, life:.4, max:.4, col:'#2fd0c4', fill:'#2fd0c4'});
+  G.rings.push({x:cx0, y:cy0, life:.3});
+  for(let i = 0; i < 60; i++){ const a = Math.random() * 6.283, v = 200 + Math.random() * 520; G.parts.push({x:cx0, y:cy0, vx:Math.cos(a) * v, vy:Math.sin(a) * v - 120, life:.6, col:PAINT_COLS[i % 3].c}); }
+  foesOf(f).forEach(e => {
+    if(e.inv > 0 || Math.hypot(e.x - cx0, (e.y - e.h / 2) - cy0) > d.radius) return;
+    const hp0 = e.hp + (e.bar || 0);
+    hurt(e, {c:f.c, A:f.A, face:Math.sign(e.x - cx0) || f.face, src:f});
+    if(!e.dead && e.hp + (e.bar || 0) < hp0 && P && P.kind === 'paint'){   // it really landed: FULL Paint Stacks at once (Sticky Situation fully on)
+      const S = e.paint || (e.paint = {n:0, tm:0, d:P}); S.d = P; S.n = Math.min(P.max, d.stacks || P.max); S.tm = P.decay;
+      G.pops.push({x:e.x, y:e.y - e.h - 22, txt:'STUCK!', life:.8});
+      for(let i = 0; i < 12; i++) G.parts.push({x:e.x + (Math.random() - .5) * 20, y:e.y - Math.random() * e.h, vx:(Math.random() - .5) * 220, vy:-Math.random() * 200, life:.4, col:PAINT_COLS[i % 3].c});
+    }
+  });
+}
+function mpStep(f, o, dt){
+  const Z = f.mp, d = Z.d, rise = d.rise != null ? d.rise : 90; Z.t += dt; f.vx = f.vy = 0;
+  let h;
+  if(Z.t < Z.Tj){ const k = Z.t / Z.Tj; h = rise * (1 - (1 - k) * (1 - k)); if(!Z.up){ Z.up = true; G.rings.push({x:f.x, y:f.y - 4, life:.25}); } }   // the hop up
+  else if(Z.t < Z.Tj + Z.Tp){ h = rise + Math.sin(G.t * 9) * 3; if(Math.random() < dt * 30) G.parts.push({x:Z.x + (Math.random() - .5) * (d.radius * 1.4), y:Z.y0 - 2, vx:(Math.random() - .5) * 60, vy:-30 - Math.random() * 90, life:.35, col:PAINT_COLS[Math.floor(Math.random() * 3)].c}); }   // hovering: painting
+  else{
+    if(!Z.blasted){ Z.blasted = true; mpBlast(f, Z); }
+    const k = Math.min(1, (Z.t - Z.Tj - Z.Tp) / Z.Tl); h = rise * (1 - k * k);                  // she drops back down
+  }
+  f.x = Z.x; f.y = Z.y0 - h; f.gr = false;
+  if(Z.t >= Z.T){ f.y = Z.y0; f.gr = true; f.jumps = 2; mpEnd(f, false); }
 }
 function hookStep(f, o, dt){
   const h = f.hk, d = h.d;
@@ -1147,6 +1404,360 @@ function retributionHit(src, o, A, P){   // runs inside the hit that connects (h
     o.vx = dir * KB.x * (P.kbx ?? 1); o.vy = KB.y * (P.kby ?? 1); o.gr = false;
     o.stun = Math.max(o.stun, KB.stun * (P.stunx || 1)); o.inv = Math.max(o.inv, .15); o.flash = .12;
   }
+}
+// ---- NETHROS SKILL I: GRAVEBOUND HANDS ----
+// skills.js: {kind:'gravebound', time, at, clusters, perCluster, spread, dist, speed, linger, sink, width, hh, dmg, kbx, kby, stunx, cd}
+// G.hands = [{src, dir, y (the floor), t, d, ph:'go'|'linger'|'sink', lt, sk, hit:{idx:true}, cl:[{x, x1 (where it stops), dl (rise delay), rise 0..1, w, sp, hands:[{ox, oy, sz, sd}]}]}]
+// The hands rise out of the floor in clusters in front of him (rise), crawl forward slowly (go) up to d.dist px (or the edge of the platform), linger there still clawing (linger d.linger s), then sink back down (sink d.sink s).
+// While they crawl, an enemy at floor level (feet from Y - d.hh to Y + 10: a jump over them works) that touches a cluster is hurt ONCE per cast (hurt() = Death's Embrace counts) and thrown away in the crawl direction.
+const platUnder = f => G.P.find(p => f.x >= p.x - 4 && f.x <= p.x + p.w + 4 && Math.abs(p.y - f.y) < 10);
+function graveSpawn(f){
+  const d = f.A.gb, P = platUnder(f); if(!P) return;
+  const dir = f.face || 1, lo = P.x + 10, hi = P.x + P.w - 10, cl = [];
+  for(let i = 0; i < d.clusters; i++){
+    const off = 26 + (i / Math.max(1, d.clusters - 1)) * d.spread + (Math.random() - .5) * 10, x0 = clampN(f.x + dir * off, lo, hi), hands = [];
+    for(let j = 0; j < d.perCluster; j++) hands.push({ox:(j - (d.perCluster - 1) / 2) * 9 + (Math.random() - .5) * 5, oy:(Math.random() - .5) * 8, sz:.8 + Math.random() * .5, sd:Math.random() * 9});
+    cl.push({x:x0, x1:clampN(x0 + dir * d.dist, lo, hi), dl:Math.random() * .3, rise:0, w:d.perCluster * 9 + 14, sp:.85 + Math.random() * .3, hands});
+  }
+  (G.hands = G.hands || []).push({src:f, dir, y:P.y, t:0, d, ph:'go', lt:0, sk:0, hit:{}, cl});
+  G.shake = Math.max(G.shake, .12);
+}
+function stepHands(dt){
+  if(!G.hands) return;
+  for(const H of G.hands){
+    const d = H.d; H.t += dt;
+    if(H.ph === 'go'){
+      let moving = false;
+      for(const c of H.cl){
+        if(H.t < c.dl){ moving = true; continue; }   // not risen yet = still part of the crawl
+        c.rise = Math.min(1, c.rise + dt / .28);
+        if(c.rise < .6) { moving = true; continue; }
+        const left = (c.x1 - c.x) * H.dir;
+        if(left > 0){ c.x += H.dir * Math.min(left, d.speed * c.sp * dt); moving = true; }
+      }
+      const f = H.src;
+      for(const q of G.f){                                           // enemies in their path
+        if(q === f || q.dead || q.team === f.team || q.inv > .4 || H.hit[q.idx] || q.capturedBy != null) continue;
+        if(q.y < H.y - d.hh || q.y > H.y + 10) continue;            // too high (jumped over them) or below the floor
+        if(!H.cl.some(c => c.rise >= .5 && Math.abs(q.x - c.x) <= c.w / 2 + q.w / 2 && Math.abs(q.x - c.x) < 60)) continue;
+        H.hit[q.idx] = true;
+        hurt(q, {c:f.c, A:skillA(d, {noShake:true, noHitstop:true}), face:H.dir, src:f});
+        for(let i = 0; i < 8; i++) G.parts.push({x:q.x, y:q.y - Math.random() * q.h, vx:H.dir * (80 + Math.random() * 260), vy:-Math.random() * 200, life:.4, col:'#0a0612'});
+      }
+      if(!moving){ H.ph = 'linger'; H.lt = 0; }
+    }else if(H.ph === 'linger'){ H.lt += dt; if(H.lt >= d.linger){ H.ph = 'sink'; H.sk = 0; } }   // they stay and keep clawing
+    else{ H.sk += dt; for(const c of H.cl) c.rise = Math.max(0, 1 - H.sk / d.sink); }               // back to hell
+  }
+  G.hands = G.hands.filter(H => !(H.ph === 'sink' && H.sk >= H.d.sink));
+}
+function drawHands(){
+  (G.hands || []).forEach(H => {
+    const a = Characters.artOf(H.src.c.id); if(!a.gbHands) return;
+    cx.save(); a.gbHands(cx, H, G.t); cx.restore();
+  });
+}
+// ---- RISE OF THE DAMNED (Nethros II) ----
+function spawnDamned(f, d){
+  if(G.skeletons){
+    G.skeletons.forEach(s => {
+      if(s.src === f){
+        for(let i = 0; i < 6; i++) G.parts.push({x:s.x, y:s.y - Math.random() * s.h, vx:(Math.random() - .5) * 160, vy:-Math.random() * 160, life:.35, col:'#8b5cf6'});
+      }
+    });
+    G.skeletons = G.skeletons.filter(s => s.src !== f);
+  }
+  const P = platUnder(f) || G.P[0], gy = P ? P.y : f.y, dir = f.face || 1;
+  const offsets = [-48 * dir, 38 * dir, 84 * dir];
+  const types = ['swordsman', 'spearman', 'axeman'];
+  const skels = [];
+  G.shake = Math.max(G.shake, .15);
+
+  types.forEach((type, i) => {
+    const rawX = f.x + offsets[i];
+    const sx = P ? clampN(rawX, P.x + 14, P.x + P.w - 14) : rawX;
+    const hp = type === 'axeman' ? 75 : type === 'spearman' ? 50 : 60;
+    const reach = type === 'spearman' ? 64 : type === 'axeman' ? 44 : 34;
+    const spd = type === 'swordsman' ? 165 : type === 'spearman' ? 135 : 105;
+    const cd = type === 'swordsman' ? 0.6 : type === 'spearman' ? 0.95 : 1.45;
+    const dmg = type === 'axeman' ? 1.3 : type === 'spearman' ? 0.7 : 0.5;
+    const atkDur = type === 'axeman' ? 0.62 : type === 'spearman' ? 0.42 : 0.32;
+
+    skels.push({
+      id: ++HID, src: f, team: f.team, type,
+      x: sx, y: gy, vx: 0, vy: 0, face: dir,
+      hp, maxHp: hp, life: 0, maxLife: (d && d.dur) || 16,
+      w: 22, h: 40, spd, reach, cd, dmg, atkDur,
+      atkCd: 0.15 + i * 0.1, atkT: 0, hitDone: false,
+      riseT: 0.35 + i * 0.08, walkT: Math.random() * 5, flash: 0
+    });
+    G.rings.push({x: sx, y: gy - 4, life: .25});
+    for(let j = 0; j < 8; j++) G.parts.push({x: sx + (Math.random() - .5) * 16, y: gy - 2, vx: (Math.random() - .5) * 120, vy: -Math.random() * 180, life: .4, col: '#7c3aed'});
+  });
+
+  G.skeletons = (G.skeletons || []).concat(skels);
+  f.skeletons = skels;
+  G.pops.push({x: f.x, y: f.y - f.h - 22, txt: 'RISE OF THE DAMNED', life: .9});
+}
+function damageSkeleton(skel, dmg, dir){
+  if(skel.hp <= 0) return;
+  skel.hp -= dmg;
+  skel.flash = 0.12;
+  G.pops.push({x: skel.x + (Math.random() - .5) * 12, y: skel.y - skel.h - 8, txt: Math.round(dmg), life: .7});
+  G.rings.push({x: skel.x, y: skel.y - skel.h / 2, life: .2});
+  for(let i = 0; i < 4; i++) G.parts.push({x: skel.x, y: skel.y - Math.random() * skel.h, vx: (Math.random() - .5) * 160 + (dir || 0) * 80, vy: -Math.random() * 140, life: .3, col: '#eae6df'});
+  if(skel.hp <= 0){
+    for(let i = 0; i < 14; i++){
+      G.parts.push({x: skel.x + (Math.random() - .5) * 18, y: skel.y - Math.random() * skel.h, vx: (Math.random() - .5) * 260, vy: -80 - Math.random() * 260, life: .5, col: i % 2 ? '#ffffff' : '#7c3aed'});
+    }
+  }
+}
+function stepSkeletons(dt){
+  if(!G.skeletons || !G.skeletons.length) return;
+  for(let i = G.skeletons.length - 1; i >= 0; i--){
+    const s = G.skeletons[i];
+    s.life += dt;
+    if(s.flash > 0) s.flash -= dt;
+    if(s.hp <= 0 || s.life >= s.maxLife || s.src.dead){
+      for(let j = 0; j < 8; j++) G.parts.push({x: s.x, y: s.y - Math.random() * s.h, vx: (Math.random() - .5) * 180, vy: -Math.random() * 180, life: .4, col: '#eae6df'});
+      G.skeletons.splice(i, 1);
+      continue;
+    }
+    if(s.riseT > 0){ s.riseT -= dt; continue; }
+
+    const enemies = foesOf(s.src).filter(e => !e.dead && e.inv <= .6 && e.hp > 0);
+    let target = null, minDist = 9999;
+    for(const e of enemies){
+      const d = Math.hypot(e.x - s.x, (e.y - e.h / 2) - (s.y - s.h / 2));
+      if(d < minDist){ minDist = d; target = e; }
+    }
+
+    if(target){
+      const dx = target.x - s.x, dy = (target.y - target.h / 2) - (s.y - s.h / 2), ax = Math.abs(dx);
+      if(ax > 6) s.face = Math.sign(dx) || s.face;
+
+      if(ax <= s.reach && Math.abs(dy) < 50){
+        s.vx = 0;
+        if(s.atkCd <= 0 && s.atkT <= 0){ s.atkT = s.atkDur; s.hitDone = false; }
+      }else if(s.atkT <= 0){
+        s.vx = s.face * s.spd;
+        s.walkT += dt * (s.spd / 12);
+        if(target.y < s.y - 40 && s.vy === 0 && Math.random() < dt * 4) s.vy = -580;
+      }
+    }else{
+      const ndx = s.src.x - s.x;
+      if(Math.abs(ndx) > 100){ s.face = Math.sign(ndx) || s.face; s.vx = s.face * (s.spd * 0.7); s.walkT += dt * 8; }
+      else s.vx = 0;
+    }
+
+    if(s.atkT > 0){
+      s.atkT -= dt; s.vx = 0;
+      if(!s.hitDone && s.atkT <= s.atkDur * 0.55){
+        s.hitDone = true;
+        if(target && Math.abs(target.x - s.x) <= s.reach + 22 && Math.abs(target.y - s.y) < 55 && target.inv <= 0){
+          const A = skillA({
+            dmg: s.dmg,
+            kbx: s.type === 'axeman' ? .7 : .35,
+            kby: s.type === 'axeman' ? .45 : .2,
+            stunx: s.type === 'axeman' ? 1.3 : .8,
+            shake: s.type === 'axeman' ? 1.4 : .5,
+            hitstop: s.type === 'axeman' ? .08 : .03
+          }, {hid: ++HID, noSlash: true});
+          hurt(target, {c: s.src.c, A, face: s.face, src: s.src});
+          const nParts = s.type === 'axeman' ? 14 : 7;
+          for(let p = 0; p < nParts; p++){
+            G.parts.push({
+              x: target.x + (Math.random() - .5) * 20,
+              y: target.y - target.h / 2 + (Math.random() - .5) * 20,
+              vx: (Math.random() - .5) * 220 + s.face * 100,
+              vy: -Math.random() * 180,
+              life: .35,
+              col: p % 2 ? '#a855f7' : '#c084fc'
+            });
+          }
+        }
+      }
+      if(s.atkT <= 0) s.atkCd = s.cd;
+    }else if(s.atkCd > 0){
+      s.atkCd -= dt;
+    }
+
+    s.vy = Math.min(s.vy + GRAV * dt, 1100);
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    for(const p of G.P){
+      if(s.x + s.w / 2 > p.x && s.x - s.w / 2 < p.x + p.w && s.y >= p.y && s.y - s.vy * dt <= p.y + 4){
+        s.y = p.y; s.vy = 0; break;
+      }
+    }
+
+    foesOf(s.src).forEach(e => {
+      if(e.atk > 0 && e.A && !e.hitDone && e.atk < e.A.hitFrom && e.atk > e.A.hitTo){
+        const ehx = e.face > 0 ? e.x + e.w / 2 : e.x - e.w / 2 - (e.A.reach || 46);
+        const reach = e.A.reach || 46;
+        if(ehx < s.x + s.w / 2 && ehx + reach > s.x - s.w / 2 && Math.abs(e.y - s.y) < 45){
+          const dmg = (10 + e.c.hp / 40) * 2.0 * (e.A.dmg || 1);
+          damageSkeleton(s, dmg, e.face);
+        }
+      }
+    });
+  }
+}
+function drawSkeletons(){
+  if(!G.skeletons || !G.skeletons.length) return;
+  G.skeletons.forEach(s => {
+    const x = s.x, y = s.y, dir = s.face, white = s.flash > 0;
+    const boneCol = white ? '#ffffff' : '#f1ede4';
+
+    cx.save(); cx.translate(x, y); cx.scale(dir, 1);
+    if(s.riseT > 0){
+      cx.beginPath(); cx.ellipse(0, 0, 16, 4, 0, 0, 7);
+      cx.fillStyle = 'rgba(126,34,206,.5)'; cx.fill();
+      cx.restore(); return;
+    }
+
+    const moving = Math.abs(s.vx) > 10;
+    const l1 = moving ? Math.sin(s.walkT) * 0.45 : 0.1;
+    const l2 = moving ? -Math.sin(s.walkT) * 0.45 : -0.1;
+
+    cx.strokeStyle = boneCol; cx.lineWidth = 2.4; cx.lineCap = 'round'; cx.lineJoin = 'round';
+    cx.beginPath(); cx.moveTo(-4, -14); cx.lineTo(4, -14); cx.stroke();
+
+    const k1x = Math.sin(l1) * 8, k1y = -14 + Math.cos(l1) * 8;
+    const a1x = k1x + Math.sin(l1 * 0.5) * 8, a1y = k1y + Math.cos(l1 * 0.5) * 8;
+    cx.beginPath(); cx.moveTo(2, -14); cx.lineTo(k1x + 2, k1y); cx.lineTo(a1x + 2, a1y); cx.lineTo(a1x + 5, a1y); cx.stroke();
+
+    const k2x = Math.sin(l2) * 8, k2y = -14 + Math.cos(l2) * 8;
+    const a2x = k2x + Math.sin(l2 * 0.5) * 8, a2y = k2y + Math.cos(l2 * 0.5) * 8;
+    cx.beginPath(); cx.moveTo(-2, -14); cx.lineTo(k2x - 2, k2y); cx.lineTo(a2x - 2, a2y); cx.lineTo(a2x + 1, a2y); cx.stroke();
+
+    cx.beginPath(); cx.moveTo(0, -14); cx.lineTo(0, -28); cx.stroke();
+    [-17, -21, -25].forEach((ry, i) => { const rw = 5.2 - i * 0.7; cx.beginPath(); cx.moveTo(-rw, ry); cx.lineTo(rw, ry); cx.stroke(); });
+
+    cx.fillStyle = boneCol; cx.strokeStyle = '#0b0f1c'; cx.lineWidth = 1.2;
+    cx.beginPath(); cx.arc(1, -34, 5.8, 0, 7); cx.fill(); cx.stroke();
+    cx.fillStyle = '#180928';
+    cx.beginPath(); cx.arc(3.2, -34, 1.5, 0, 7); cx.fill();
+    cx.beginPath(); cx.arc(0.2, -34, 1.3, 0, 7); cx.fill();
+    cx.fillStyle = '#d8b4fe'; cx.fillRect(3.2, -34.5, 0.9, 0.9);
+
+    const atking = s.atkT > 0, prog = atking ? 1 - s.atkT / s.atkDur : 0;
+    if(s.type === 'swordsman'){
+      const swAng = atking ? -0.8 + prog * 2.2 : 0.45;
+      const hx = 2 + Math.cos(swAng) * 11, hy = -25 + Math.sin(swAng) * 11;
+      cx.strokeStyle = boneCol; cx.lineWidth = 2.2;
+      cx.beginPath(); cx.moveTo(0, -26); cx.lineTo(hx, hy); cx.stroke();
+      cx.save(); cx.translate(hx, hy); cx.rotate(swAng + 0.4);
+      cx.fillStyle = '#64748b'; cx.fillRect(-1.5, -2, 3, 4);
+      cx.strokeStyle = '#f8fafc'; cx.lineWidth = 2.4;
+      cx.beginPath(); cx.moveTo(0, 0); cx.lineTo(17, 0); cx.stroke();
+      cx.restore();
+    }else if(s.type === 'spearman'){
+      const spThrust = atking ? Math.sin(prog * Math.PI) * 18 : 0;
+      const hx = 4 + spThrust, hy = -24;
+      cx.strokeStyle = boneCol; cx.lineWidth = 2.2;
+      cx.beginPath(); cx.moveTo(0, -26); cx.lineTo(hx - 8, hy); cx.stroke();
+      cx.beginPath(); cx.moveTo(0, -24); cx.lineTo(hx, hy); cx.stroke();
+      cx.strokeStyle = '#a8a29e'; cx.lineWidth = 2.2;
+      cx.beginPath(); cx.moveTo(hx - 22, hy); cx.lineTo(hx + 24, hy); cx.stroke();
+      cx.fillStyle = '#f8fafc'; cx.strokeStyle = '#0b0f1c'; cx.lineWidth = 1;
+      cx.beginPath(); cx.moveTo(hx + 24, hy - 3.5); cx.lineTo(hx + 34, hy); cx.lineTo(hx + 24, hy + 3.5); cx.closePath(); cx.fill(); cx.stroke();
+    }else if(s.type === 'axeman'){
+      const axeAng = atking ? -2.2 + prog * 3.8 : -0.7;
+      const hx = 2 + Math.cos(axeAng) * 12, hy = -25 + Math.sin(axeAng) * 12;
+      cx.strokeStyle = boneCol; cx.lineWidth = 2.4;
+      cx.beginPath(); cx.moveTo(0, -26); cx.lineTo(hx, hy); cx.stroke();
+      cx.save(); cx.translate(hx, hy); cx.rotate(axeAng + 1.2);
+      cx.strokeStyle = '#78350f'; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.moveTo(-8, 0); cx.lineTo(20, 0); cx.stroke();
+      cx.fillStyle = '#cbd5e1'; cx.strokeStyle = '#0f172a'; cx.lineWidth = 1.3;
+      cx.beginPath(); cx.arc(17, -5, 10, 0.35, 2.75); cx.quadraticCurveTo(17, 3, 11, 0); cx.closePath(); cx.fill(); cx.stroke();
+      cx.restore();
+      if(atking && prog > 0.2 && prog < 0.9){
+        cx.save();
+        cx.strokeStyle = 'rgba(255,255,255,0.85)'; cx.lineWidth = 2.4;
+        cx.beginPath(); cx.arc(22, -18, 20, 0, Math.PI * 2); cx.stroke();
+        cx.restore();
+      }
+    }
+    cx.restore();
+
+    // Individual health bar matching reference screenshot (lilac/purple bar)
+    const bw = 26, bh = 4, bx = x - bw / 2, by = y - 48;
+    const hpPct = Math.max(0, Math.min(1, s.hp / s.maxHp));
+    cx.fillStyle = 'rgba(30, 20, 50, 0.7)'; cx.fillRect(bx, by, bw, bh);
+    cx.fillStyle = '#b088ec'; cx.fillRect(bx, by, bw * hpPct, bh);
+  });
+}
+// ---- FALLEN DESCENT (Nethros Ultimate) ----
+function fallenDescentStep(f, o, dt){
+  const C = f.descent, d = C.d; C.t += dt;
+  f.vx = 0; f.vy = 0; f.inv = Math.max(f.inv, 2.5);
+  const T0 = C.T_up, T1 = T0 + C.T_van, T2 = T1 + C.T_down;
+
+  if(C.t < T0){
+    C.ph = 'ascend';
+    const k = C.t / T0;
+    f.y = C.y0 - 280 * (k * k);
+    f.gr = false;
+    for(let i = 0; i < 2; i++) G.parts.push({x: f.x + (Math.random() - .5) * 20, y: f.y + 10, vx: (Math.random() - .5) * 80, vy: 100 + Math.random() * 150, life: .3, col: '#7e22ce'});
+  }else if(C.t < T1){
+    C.ph = 'vanish';
+    f.y = -400;
+    if(o && !o.dead){
+      C.tx = approach(C.tx, o.x, 700 * dt);
+      const gy = groundAt(C.tx, -9999);
+      if(gy != null) C.gy = gy;
+    }
+  }else if(C.t < T2){
+    C.ph = 'descend';
+    const k = (C.t - T1) / C.T_down;
+    f.x = C.tx;
+    f.y = lerp(-300, C.gy - 12, k * k);
+    f.gr = false;
+    for(let i = 0; i < 4; i++){
+      G.parts.push({x: f.x + (Math.random() - .5) * 36, y: f.y - Math.random() * 20, vx: (Math.random() - .5) * 120, vy: -150 - Math.random() * 200, life: .35, col: i % 2 ? '#3b0764' : '#a855f7'});
+    }
+  }else{
+    C.ph = 'recover';
+    f.x = C.tx; f.y = C.gy; f.gr = true;
+    if(!C.impacted){
+      C.impacted = true;
+      G.shake = Math.max(G.shake, 0.65);
+      G.hs = Math.max(G.hs || 0, d.hitstop || 0.12);
+      G.waves.push({x: f.x, y: f.y - 10, r: d.radius, life: .65, max: .65, col: '#a855f7', fill: '#3b0764'});
+      G.waves.push({x: f.x, y: f.y - 10, r: d.radius * .7, life: .45, max: .45, col: '#c084fc', fill: '#581c87'});
+      G.waves.push({x: f.x, y: f.y - 10, r: d.radius * .38, life: .3, max: .3, col: '#ffffff', fill: '#7e22ce'});
+      G.rings.push({x: f.x, y: f.y - 10, life: .4});
+
+      for(let i = 0; i < 50; i++){
+        const a = Math.random() * 6.283, sp = 180 + Math.random() * 580;
+        G.parts.push({x: f.x, y: f.y - 8, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, life: .65, col: i % 3 ? '#7e22ce' : '#c084fc'});
+      }
+      G.pops.push({x: f.x, y: f.y - f.h - 32, txt: 'FALLEN DESCENT', life: 1.1});
+
+      foesOf(f).forEach(e => {
+        if(e.inv > 0 || e.dead) return;
+        const dist = Math.hypot(e.x - f.x, (e.y - e.h / 2) - (f.y - 10));
+        if(dist <= d.radius){
+          hurt(e, {c: f.c, A: skillA(d, {kbx: d.kbx, kby: d.kby, stunx: d.stunx, dmg: d.dmg, shake: 3}), face: Math.sign(e.x - f.x) || f.face, src: f});
+        }
+      });
+    }
+    if(C.t >= C.total){ f.descent = null; }
+  }
+}
+function drawDescentOmen(){
+  G.f.forEach(f => {
+    const C = f.descent;
+    if(!C || C.t >= C.T_up + C.T_van + C.T_down) return;
+    const pu = .5 + .5 * Math.sin(G.t * 14);
+    const rad = (C.d.radius || 240);
+    cx.save();
+    cx.fillStyle = 'rgba(59,7,100,' + (.15 + .12 * pu) + ')';
+    cx.strokeStyle = 'rgba(168,85,247,' + (.6 + .35 * pu) + ')';
+    cx.lineWidth = 2.5; cx.setLineDash([8, 6]);
+    cx.beginPath(); cx.ellipse(C.tx, C.gy - 3, rad * .8, rad * .22, 0, 0, 7); cx.fill(); cx.stroke();
+    cx.setLineDash([]); cx.restore();
+  });
 }
 // ---- ULTIMATE HEAVEN'S VERDICT (Paladin) ----
 // G.verdicts = [{src, x, y, t, d, hit}]. At t = d.delay the shield lands: every enemy inside d.radius px of (x, y) takes d.dmg (a big hit, blasted away from the center) and gets -d.armorDown armor for d.armorDur s.
@@ -1284,6 +1895,9 @@ function onLanded(src, o, A){
   else if(P.kind === 'frost') frostHit(src, o, A, P);
   else if(P.kind === 'static') staticHit(src, o, A, P);                   // STATIC CHARGE (Fulminar)
   else if(P.kind === 'momentum') momentumHit(src, A, P);                 // THE SHOW MUST GO ON: every landed hit fills the Momentum gauge                  // ABSOLUTE ZERO: +1 Frost stack, or the READY freeze
+  else if(P.kind === 'paint'){                       // STICKY SITUATION (Miette): a landed BASIC hit = +1 Paint Stack on that enemy; any hit refreshes the decay timer of the stacks it already has
+    if(!A.skill) paintApply(o, P); else if(o.paint) o.paint.tm = P.decay;
+  }
   else if(P.kind === 'marks'){                       // FRESH MEAT: every landed hit (basic or skill) = 1 Meat Mark on that enemy. At `marks` marks they are Wounded: bleed `dps` x their max HP per second for `dur` s
     o.mk = (o.mk || 0) + 1;
     if(o.mk >= P.marks){ o.mk = 0; o.bl = P.dur; o.blDps = o.max * P.dps; }   // already bleeding = the bleed time is refreshed
@@ -1685,6 +2299,315 @@ function gravityStep(z, dt){   // SHATTERED GRAVITY: forms for d.form s, then fo
     if(!o.gr) o.vy += dy / dist * (d.pullAir || 500) * k * dt;          // in the air they are drawn toward it vertically too
   });
 }
+// ---- ERRATA ULTIMATE: SYSTEM OVERRIDE. G.sov = {src, d, t, age, ph:'cast'|'on'|'fade', saved, fakes, swapT, mesh, frag}. cast (d.cast s, rooted, a hit fizzles it) -> on (d.dur s) -> fade (d.fade s).
+// ON: (1) every enemy's controls are scrambled for the WHOLE time (f.scr, scrApply). (2) The floating platforms are swapped: exactly d.real of them are moved to other positions; every other position
+//     (the old ones + d.extra new ones) holds a fake that looks IDENTICAL and that only Errata's team can stand on (G.sov.fakes, fakePlatStep). An enemy that lands on a fake falls through (f.fakeFall):
+//     fall damage (d.fallDmg x max HP) when the fall ends (on a real platform, or out of the arena = respawn on a real platform); 0 HP = a normal KO (a life). The real ones return when it ends.
+// (3) Enemies glitch-teleport to a random real platform at random, ever shorter intervals (d.glitchMin..d.glitchMax, shrinking by d.glitchTighten). (4) The background is a collapsing mirror dimension.
+const shuffle = a => { a = a.slice(); for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function derange(a){ let b; do b = shuffle(a); while(b.some((v, i) => v === a[i])); return b; }   // a shuffle where NOTHING stays in its place
+function makeScr(){   // the scrambled control mapping (fixed until the ultimate ends): pressing X does mv[X] (movement) / sk[X] (attack + skills)
+  const M = ['l', 'r', 'jump', 'drop'], S = ['atk', 's0', 's1', 's2'], pm = derange(M), ps = derange(S), mv = {}, sk = {};
+  M.forEach((k, i) => mv[k] = pm[i]); S.forEach((k, i) => sk[k] = ps[i]);
+  return {mv, sk, pl:0, pr:0, jUntil:0, dUntil:0};
+}
+function scrApply(f){   // rewires this frame's inputs (human or bot) before stepF reads them; scrRestore puts the raw ones back (a bot keeps its own state)
+  const S = f.scr, I = f.in, saved = {l:I.l, r:I.r, held:I.held};
+  const edge = {l:I.l && !S.pl ? 1 : 0, r:I.r && !S.pr ? 1 : 0, jump:f.jq ? 1 : 0, drop:f.dq ? 1 : 0};
+  if(f.jq) S.jUntil = G.t + .3; if(f.dq) S.dUntil = G.t + .3;
+  const hold = {l:I.l ? 1 : 0, r:I.r ? 1 : 0, jump:G.t < S.jUntil ? 1 : 0, drop:G.t < S.dUntil ? 1 : 0};
+  S.pl = I.l; S.pr = I.r;
+  const out = {l:0, r:0, jump:0, drop:0};
+  for(const k in S.mv){ const t = S.mv[k]; out[t] = (t === 'l' || t === 'r') ? hold[k] : edge[k]; }   // direction targets follow the HELD state, jump / drop targets fire once per press
+  I.l = out.l; I.r = out.r; f.jq = !!out.jump; f.dq = !!out.drop;
+  let nAq = false, nSkq = null;
+  if(f.aq){ const am = I.aim; nSkq = {i:+S.sk.atk[1], ax:am ? am.x : f.face, ay:am ? am.y : 0, drag:!!am, m:am ? Math.min(1, Math.hypot(am.x, am.y)) : 1}; }   // the ATK button casts a skill
+  if(f.skq){ const t = S.sk['s' + f.skq.i]; if(t === 'atk') nAq = true; else nSkq = {...f.skq, i:+t[1]}; }                                          // a skill button casts another skill (or attacks)
+  f.aq = nAq; f.skq = nSkq; I.held = false;
+  return saved;
+}
+function scrRestore(f, sv){ f.in.l = sv.l; f.in.r = sv.r; f.in.held = sv.held; }
+function makeSovFx(Z){   // the mirror dimension's cracked panes (a jittered triangle mesh, normalized 0..1) and the floating fragments
+  const r = Math.random, C = 9, R = 6, V = [], tints = ['150,110,230', '200,170,255', '90,60,170', '235,225,255'], tris = [], frag = [];
+  for(let j = 0; j <= R; j++){ V.push([]); for(let i = 0; i <= C; i++){ const e = i === 0 || j === 0 || i === C || j === R; V[j].push([(i + (e ? 0 : (r() - .5) * .7)) / C, (j + (e ? 0 : (r() - .5) * .7)) / R]); } }
+  const add = (a, b, c) => tris.push({p:[a, b, c], c:tints[Math.floor(r() * 4)], a:.06 + r() * .16, ph:r() * 6.28, spin:(r() - .5) * 3, k:.6 + r() * .8, fallAt:r() < .55 ? 1 + r() * Math.max(1, Z.d.dur - 2.5) : 1e9});
+  for(let j = 0; j < R; j++) for(let i = 0; i < C; i++){
+    const a = V[j][i], b = V[j][i + 1], c = V[j + 1][i], d = V[j + 1][i + 1];
+    if(r() < .5){ add(a, b, c); add(b, d, c); } else { add(a, b, d); add(a, d, c); }
+  }
+  for(let i = 0; i < 42; i++) frag.push({x:r(), y:r(), s:8 + r() * 34, rot:r() * 6.28, vr:(r() - .5) * 2.4, vy:.015 + r() * .07, vx:(r() - .5) * .02, a:.15 + r() * .4, t:tints[Math.floor(r() * 4)], q:.4 + r() * .6});
+  Z.mesh = tris; Z.frag = frag;
+}
+function sovStart(Z){   // the cast is done: everything happens at once
+  const f = Z.src, d = Z.d, r = Math.random; Z.ph = 'on'; Z.t = 0;
+  G.shake = Math.max(G.shake, .5); G.hs = Math.max(G.hs || 0, .1);
+  G.waves.push({x:f.x, y:f.y - 20, r:W * 1.2, life:.8, max:.8, col:'#e0c3ff', fill:'#9d4edd'}); G.pops.push({x:f.x, y:f.y - f.h - 30, txt:'SYSTEM OVERRIDE', life:1.2});
+  foesOf(f).forEach(e => { e.scr = makeScr(); e.glNext = .9 + r() * .9; G.pops.push({x:e.x, y:e.y - e.h - 18, txt:'CONTROLS CORRUPTED', life:1}); });   // 1. scrambled controls
+  const main = G.P.find(p => p.main), fl = G.P.filter(p => !p.main), K = fl.length;                                                                          // 2. false platforms
+  Z.saved = fl.map(p => ({p, x:p.x, y:p.y, w:p.w}));
+  const pool = fl.map(p => ({x:p.x, y:p.y, w:p.w}));   // every position the illusion can use: the old platform spots + d.extra new ones
+  for(let n = 0, t = 0; n < (d.extra == null ? 2 : d.extra) && t < 300; t++){
+    const w = 110 + r() * 90, x = 60 + r() * (W - 120 - w), y = Math.round(main.y - 105 * (1 + Math.floor(r() * 2)) + (r() - .5) * 20);
+    if(pool.every(q => Math.abs(q.y - y) > 60 || x + w + 30 < q.x || x > q.x + q.w + 30)){ pool.push({x, y, w}); n++; }
+  }
+  const taken = new Set(), reals = [];
+  shuffle([...Array(K).keys()]).slice(0, Math.min(d.real || 3, K)).forEach(i => {   // exactly d.real platforms move, each to a DIFFERENT position
+    const free = pool.map((_, j) => j).filter(j => j !== i && !taken.has(j)), j = free[Math.floor(r() * free.length)];
+    taken.add(j); const p = fl[i], s = pool[j]; p.x = s.x; p.y = s.y; p.w = s.w; reals.push(p);
+  });
+  Z.fakes = pool.map((s, j) => taken.has(j) ? null : {x:s.x, y:s.y, w:s.w, h:16, fake:1}).filter(Boolean);   // everywhere else: an identical fake
+  G.P = [main, ...reals]; Z.swapT = .6;
+}
+function endSysOv(){   // time is up (or Errata was KO'd): the real platforms go home, the fakes vanish, controls come back
+  const Z = G.sov; if(!Z || Z.ph === 'fade') return;
+  if(Z.ph === 'cast'){ G.sov = null; return; }
+  const main = G.P.find(p => p.main);
+  Z.saved.forEach(s => { s.p.x = s.x; s.p.y = s.y; s.p.w = s.w; });
+  G.P = [main, ...Z.saved.map(s => s.p)]; Z.fakes = []; Z.swapT = .6;
+  G.f.forEach(e => { e.scr = null; });
+  G.waves.push({x:W / 2, y:main.y, r:W * 1.2, life:.7, max:.7, col:'#c084fc', fill:'#7e22ce'}); G.pops.push({x:Z.src.x, y:Z.src.y - Z.src.h - 30, txt:'REALITY RESTORED', life:1});
+  Z.ph = 'fade'; Z.t = 0;
+}
+function sovBusy(e){ return e.dead || e.capturedBy != null || e.slam || e.onsl || e.slaughter || e.uhand || e.shd || e.rush || e.hk || e.fc || e.fl || e.sc || e.ls || e.fakeFall || e.rec > 0; }
+function sovGlitch(e){   // glitch displacement: teleport to a random spot on a REAL platform
+  const sp = randomSpots(1, G.f.filter(q => !q.dead))[0]; if(!sp) return;
+  glassBurst(e.x, e.y - e.h / 2, 14, 26, 380);
+  blinkTo(e, sp.x, sp.y, foeOf(e)); e.vx = 0; e.vy = 0; e.flash = .12;
+  glassBurst(e.x, e.y - e.h / 2, 14, 26, 380);
+}
+function stepSysOv(dt){
+  const Z = G.sov; if(!Z) return;
+  const f = Z.src, d = Z.d; Z.t += dt; Z.age += dt; if(Z.swapT > 0) Z.swapT -= dt;
+  if(Z.ph === 'cast'){
+    if(f.dead || f.stun > 0 || f.capturedBy != null || f.frz > 0 || !f.A || f.A.skill !== 'sysoverride'){   // hit / caught during the cast: it fizzles
+      G.sov = null; if(d.failCd != null) f.uc = d.failCd;
+      if(f.A && f.A.skill === 'sysoverride'){ f.atk = 0; f.A = f.base || f.K.basic; }
+      G.pops.push({x:f.x, y:f.y - f.h - 22, txt:'INTERRUPTED', life:.8}); glassBurst(f.x, f.y - f.h / 2, 16, 40, 320);
+      return;
+    }
+    if(Math.random() < dt * 50){ const px = f.x + (Math.random() - .5) * 260, py = f.y - Math.random() * 130; G.parts.push({x:px, y:py, vx:(f.x - px) * 2.6, vy:(f.y - f.h / 2 - py) * 2.6, life:.35, col:['#c084fc', '#f3e8ff', '#7e22ce'][Math.floor(Math.random() * 3)]}); }
+    if(Z.t >= d.cast) sovStart(Z);
+    return;
+  }
+  if(Z.ph === 'fade'){ if(Z.t >= (d.fade || .8)) G.sov = null; return; }
+  const prog = Math.min(1, Z.t / d.dur);
+  foesOf(f).forEach(e => {
+    if(e.glNext == null) e.glNext = 1;
+    e.glNext -= dt; if(e.glNext > 0) return;
+    if(sovBusy(e)){ e.glNext = .25; return; }
+    sovGlitch(e);
+    e.glNext = (d.glitchMin + Math.random() * (d.glitchMax - d.glitchMin)) * (1 - (d.glitchTighten == null ? .5 : d.glitchTighten) * prog);   // unpredictable, and ever more often
+  });
+  if(Z.t >= d.dur) endSysOv();
+}
+function fakePlatStep(f, py){   // a fake platform: solid for Errata's team, an enemy that lands on it falls through
+  const Z = G.sov, ally = f.team === Z.src.team;
+  for(const p of Z.fakes){
+    if(f.x + f.w / 2 > p.x && f.x - f.w / 2 < p.x + p.w && py <= p.y + 1 && f.y >= p.y){
+      if(ally){ f.y = p.y; f.vy = 0; f.gr = true; f.jumps = 2; return; }
+      if(!f.fakeFall){
+        f.fakeFall = {dmg:Math.round(f.max * (Z.d.fallDmg == null ? .2 : Z.d.fallDmg))};
+        G.rings.push({x:f.x, y:p.y, life:.25}); glassBurst(f.x, p.y, 12, 30, 300); G.pops.push({x:f.x, y:f.y - f.h - 10, txt:'FALSE!', life:.7});
+      }
+    }
+  }
+}
+function fakeFallEnd(f, off){   // the fall through a false platform ends: fall damage; if they are still alive and fell out of the arena they come back on a real platform
+  const dmg = f.fakeFall ? f.fakeFall.dmg : 0; f.fakeFall = null;
+  f.hp -= dmg; f.flash = .15; G.shake = Math.max(G.shake, .12);
+  if(f.hp <= 0){ ko(f); return; }                                                  // 0 HP: a normal KO (loses a life, respawns through the usual death system)
+  if(off){
+    const sp = randomSpots(1, G.f.filter(q => !q.dead))[0];
+    f.vx = f.vy = 0; f.stun = 0; f.atk = 0; f.A = f.base || f.K.basic; f.charging = false; f.chg = 0; f.rush = null; f.hk = null; f.inv = Math.max(f.inv, .6);
+    if(sp) blinkTo(f, sp.x, sp.y, foeOf(f)); else { f.x = W / 2; f.y = 0; }
+  }
+  G.pops.push({x:f.x, y:f.y - f.h - 6, txt:dmg, life:.8});
+}
+function sovJit(p){ const k = G.sov.swapT / .6; return {...p, x:p.x + (Math.random() - .5) * 10 * k, y:p.y + (Math.random() - .5) * 6 * k}; }   // platforms flicker for a moment when the swap happens
+function drawMirrorWorld(){   // SHATTERED REALITY: a collapsing mirror dimension (screen space): cracked panes that slip away, floating + falling fragments, glitch bars
+  const Z = G.sov, d = Z.d, w = view.w, h = view.h, T = Z.age, ton = Math.max(0, T - d.cast);
+  const k = Z.ph === 'cast' ? Math.min(.35, Z.t / d.cast * .35) : Z.ph === 'on' ? Math.min(1, .35 + Z.t * 1.5) : Math.max(0, 1 - Z.t / (d.fade || .8));
+  if(k <= 0 || !Z.mesh) return;
+  cx.save();
+  const g = cx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#2a0b4f'); g.addColorStop(.55, '#0b0418'); g.addColorStop(1, '#16062e');
+  cx.globalAlpha = k * .93; cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  cx.lineWidth = 1;
+  Z.mesh.forEach((tr, n) => {
+    const fl = Math.max(0, ton - tr.fallAt); if(fl > 3.4) return;   // fell away: a dark hole is left behind
+    const P = tr.p, x0 = P[0][0] * w, y0 = P[0][1] * h, x1 = P[1][0] * w, y1 = P[1][1] * h, x2 = P[2][0] * w, y2 = P[2][1] * h;
+    cx.save();
+    if(fl > 0){ const mx = (x0 + x1 + x2) / 3, my = (y0 + y1 + y2) / 3; cx.translate(mx, my + fl * fl * 150 * tr.k); cx.rotate(fl * tr.spin); cx.translate(-mx, -my); }
+    cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.lineTo(x2, y2); cx.closePath();
+    cx.fillStyle = 'rgba(' + tr.c + ',' + (tr.a * (.75 + .25 * Math.sin(T * 1.3 + tr.ph)) * k) + ')'; cx.fill();
+    cx.strokeStyle = 'rgba(235,215,255,' + (.28 * k) + ')'; cx.stroke();
+    if(n % 5 === 0){ cx.translate(1.6, 0); cx.strokeStyle = 'rgba(0,240,255,' + (.16 * k) + ')'; cx.stroke(); cx.translate(-3.2, 0); cx.strokeStyle = 'rgba(255,60,210,' + (.16 * k) + ')'; cx.stroke(); }   // colour-split edge
+    cx.restore();
+  });
+  Z.frag.forEach(q => {   // floating mirror fragments, drifting and falling (position is a pure function of time)
+    const x = (((q.x + q.vx * T) % 1) + 1) % 1 * w, y = (((q.y + q.vy * T * q.q) % 1) + 1) % 1 * h, a = q.rot + q.vr * T, c = Math.cos(a), s = Math.sin(a), R = q.s;
+    const pt = (px, py) => [x + px * c - py * s, y + px * s + py * c];
+    const A = pt(0, -R), B = pt(R * .55, 0), C = pt(0, R * .8), D = pt(-R * .5, R * .1);
+    cx.beginPath(); cx.moveTo(A[0], A[1]); cx.lineTo(B[0], B[1]); cx.lineTo(C[0], C[1]); cx.lineTo(D[0], D[1]); cx.closePath();
+    cx.fillStyle = 'rgba(' + q.t + ',' + (q.a * k) + ')'; cx.fill(); cx.strokeStyle = 'rgba(255,255,255,' + (.35 * k) + ')'; cx.stroke();
+  });
+  for(let i = 0; i < 3; i++) if(Math.sin(T * 7 + i * 13.7) > .86){ cx.fillStyle = i % 2 ? 'rgba(0,240,255,' + (.12 * k) + ')' : 'rgba(255,60,210,' + (.12 * k) + ')'; cx.fillRect(0, (((T * .37 + i * .31) % 1) * h), w, 3 + i * 3); }   // glitch bars
+  cx.restore();
+}
+function drawSovFx(){   // (world space) a small glitch mark over every corrupted enemy
+  const Z = G.sov; if(!Z || Z.ph !== 'on') return;
+  G.f.forEach(e => {
+    if(!e.scr || e.dead) return;
+    const x = e.x, y = e.y - e.h - 12;
+    cx.save(); cx.globalAlpha = .55 + .35 * Math.sin(G.t * 18 + e.idx);
+    cx.fillStyle = '#00f0ff'; cx.fillRect(x - 9 + Math.sin(G.t * 31) * 2, y, 18, 2);
+    cx.fillStyle = '#ff3cd2'; cx.fillRect(x - 6 - Math.sin(G.t * 27) * 2, y + 4, 12, 2);
+    cx.restore();
+  });
+}
+function drawSovHud(){   // (screen space) when YOU are the one with scrambled controls: glitch scan bars + a warning
+  const Z = G.sov, a = G.f[0]; if(!Z || !a || !a.scr || Z.ph !== 'on') return;
+  const w = view.w, h = view.h, T = G.t;
+  cx.save();
+  for(let i = 0; i < 4; i++){ const y = ((T * (.6 + i * .17) + i * .29) % 1) * h; cx.fillStyle = i % 2 ? 'rgba(255,60,210,.10)' : 'rgba(0,240,255,.10)'; cx.fillRect(0, y, w, 2 + (i % 3) * 3); }
+  cx.font = '900 14px system-ui'; cx.textAlign = 'center';
+  cx.fillStyle = 'rgba(0,240,255,.8)'; cx.fillText('CONTROLS CORRUPTED', w / 2 - 1, 112);
+  cx.fillStyle = 'rgba(255,60,210,.8)'; cx.fillText('CONTROLS CORRUPTED', w / 2 + 1, 113);
+  cx.fillStyle = '#fff'; cx.fillText('CONTROLS CORRUPTED', w / 2, 112.5);
+  cx.restore();
+}
+// ---- MIETTE: STICKY SITUATION (passive kind 'paint') + PAINT ROLLER (held key kind 'roller') ----
+// PASSIVE (skills.js passive:{max, slow, jump, decay}): each landed BASIC hit = +1 Paint Stack on that enemy (e.paint = {n, tm, d}), max d.max. Every stack slows them by d.slow (x n); at d.max they also jump
+//   only d.jump x as high. Every enemy has its own counter. If she stops painting, 1 stack is lost every d.decay s (e.paint.tm); every hit (or Paint Roller application) refreshes that timer.
+// HELD KEY (skills.js hold:{after, speed, reach, maxLen, tick}): HOLD ATK (after s; a quick tap is still the combo) = she walks (at d.speed x) while dragging the brush along the floor, laying paint at the brush tip
+//   (f.trail = [{x1, x2, y, col, sid}], newest last). The trail never grows past d.maxLen px: new paint eats the oldest part. Letting go only stops painting: the paint stays until it is replaced.
+//   Every d.tick s an enemy stands on ANY of her paint it gets +1 Paint Stack (see trailStep). f.roller = {t, d, last, face, col, sid} while she paints; art.js reads it (and writes f.rollDx = brush tip reach).
+const PAINT_COLS = [{c:'#ff5fa2', d:'#c93d79', l:'#ffb3d3'}, {c:'#2fd0c4', d:'#1b8f87', l:'#a6f3ec'}, {c:'#ffd23f', d:'#d9a21a', l:'#fff0a8'}];   // same three colors as art.js PAINT
+function paintApply(e, P){
+  const S = e.paint || (e.paint = {n:0, tm:0, d:P}), was = S.n; S.d = P;
+  if(S.n < P.max) S.n++;
+  S.tm = P.decay;                                                       // refreshes the decay timer of every stack
+  for(let i = 0; i < 6; i++) G.parts.push({x:e.x + (Math.random() - .5) * 16, y:e.y - Math.random() * e.h * .6, vx:(Math.random() - .5) * 160, vy:-Math.random() * 140, life:.35, col:PAINT_COLS[i % 3].c});
+  if(was < P.max && S.n >= P.max) G.pops.push({x:e.x, y:e.y - e.h - 22, txt:'STUCK!', life:.8});
+}
+function paintStep(f, dt){
+  const S = f.paint; S.tm -= dt;
+  if(S.tm <= 0){ S.n--; S.tm = S.d.decay; if(S.n <= 0) f.paint = null; }   // 1 stack every d.decay s
+}
+const paintSlow = f => f.paint ? 1 - f.paint.n * f.paint.d.slow : 1;                                    // movement speed multiplier
+const paintJump = f => f.paint && f.paint.n >= f.paint.d.max ? f.paint.d.jump : 1;                       // jump power multiplier (only at full stacks)
+function rollerEnd(f){
+  f.roller = null;
+  if(f.A && f.A.skill === 'roller'){ f.atk = 0; f.A = f.base || f.K.basic; f.atkCd = Math.max(f.atkCd, .15); }
+}
+function layPaint(f, R, x0, x1, y, d){
+  const T = f.trail || (f.trail = []), last = T[T.length - 1], dir = Math.sign(x1 - x0);
+  if(last && last.sid === R.sid && last.y === y && last.x2 === x0 && Math.sign(last.x2 - last.x1) === dir) last.x2 = x1;   // same stroke: just make it longer
+  else T.push({x1:x0, x2:x1, y, col:R.col, sid:R.sid});
+  let L = T.reduce((a, s) => a + Math.abs(s.x2 - s.x1), 0);
+  while(L > d.maxLen && T.length){                                                                       // too long: the OLDEST paint is replaced
+    const s = T[0], len = Math.abs(s.x2 - s.x1), ex = L - d.maxLen;
+    if(len <= ex){ T.shift(); L -= len; } else { s.x1 += Math.sign(s.x2 - s.x1) * ex; L = d.maxLen; }
+  }
+}
+function rollerStep(f, dt){
+  const d = f.K.hold;
+  f.heldT = f.in.held ? (f.heldT || 0) + dt : 0;
+  const R = f.roller;
+  if(R){
+    if(!f.in.held || f.stun > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.frz > 0 || !f.gr || !f.A || f.A.skill !== 'roller'){ rollerEnd(f); return; }   // let go / hit / left the floor: the painting stops
+    R.t += dt; f.atk = f.A.time; f.atkCd = Math.max(f.atkCd, .2);
+    const reach = Math.max(14, Math.min(60, f.rollDx == null ? d.reach : f.rollDx)), tx = f.x + f.face * reach;     // where the bristles touch the floor
+    if(R.face !== f.face){ R.last = null; R.face = f.face; }
+    const pl = G.P.find(p => Math.abs(p.y - f.y) < 6 && tx > p.x + 3 && tx < p.x + p.w - 3);                          // paint only goes on the platform she is on
+    if(pl){ if(R.last != null && Math.abs(tx - R.last) > .5) layPaint(f, R, R.last, tx, pl.y, d); R.last = tx; } else R.last = null;
+    if(pl && Math.random() < dt * 12) G.parts.push({x:tx, y:f.y - 3, vx:(Math.random() - .5) * 70, vy:-30 - Math.random() * 70, life:.3, col:PAINT_COLS[R.col].c});
+    return;
+  }
+  if(f.in.held && f.heldT >= d.after && f.gr && f.stun <= 0 && !(f.frz > 0) && !f.slaughter && !f.hk && !f.rush && !f.sc && f.capturedBy == null && (f.atk <= 0 || (!f.A.skill && !f.hitDone))){
+    startSkillA(f, skillA(d, {time:1, cd:.2, root:false, noSlash:true, step:0}));
+    f.rollCol = ((f.rollCol == null ? 2 : f.rollCol) + 1) % 3;                                                        // every stroke dips the brush in the next color
+    f.roller = {t:0, d, last:null, face:f.face, col:f.rollCol, sid:++HID}; f.comboT = 0; f.aqB = 0; f.charging = false; f.chg = 0;
+  }
+}
+function trailStep(f, dt){   // keeps only the paint that still lies on a platform, and sticks the enemies standing in it
+  const T = f.trail, d = f.K.hold, P = f.K.passive;
+  for(let i = T.length - 1; i >= 0; i--){
+    const s = T[i], a = Math.min(s.x1, s.x2), b = Math.max(s.x1, s.x2);
+    if(!G.P.some(p => Math.abs(p.y - s.y) < 3 && b > p.x && a < p.x + p.w)) T.splice(i, 1);
+  }
+  if(!P || P.kind !== 'paint') return;
+  foesOf(f).forEach(e => {
+    const st = e.pst || (e.pst = {});
+    const on = e.gr && e.capturedBy == null && T.some(s => Math.abs(e.y - s.y) < 4 && e.x > Math.min(s.x1, s.x2) - 4 && e.x < Math.max(s.x1, s.x2) + 4);
+    if(!on){ st[f.idx] = 0; return; }
+    st[f.idx] = (st[f.idx] || 0) + dt;
+    if(st[f.idx] >= d.tick){ st[f.idx] = 0; paintApply(e, P); }                                                       // +1 Paint Stack at a fixed interval
+  });
+}
+function drawPaintTrails(){
+  cx.save(); cx.lineCap = 'round';
+  G.f.forEach(f => {
+    if(!f.trail || !f.trail.length) return;
+    f.trail.forEach(s => {
+      const a = Math.min(s.x1, s.x2), b = Math.max(s.x1, s.x2), pc = PAINT_COLS[s.col % 3], y = s.y;
+      cx.strokeStyle = pc.d; cx.lineWidth = 6; cx.beginPath(); cx.moveTo(a, y - 1.5); cx.lineTo(b, y - 1.5); cx.stroke();      // dark edge
+      cx.strokeStyle = pc.c; cx.lineWidth = 4.4; cx.beginPath(); cx.moveTo(a, y - 2); cx.lineTo(b, y - 2); cx.stroke();          // the paint
+      cx.globalAlpha = .7; cx.strokeStyle = pc.l; cx.lineWidth = 1.3; cx.beginPath(); cx.moveTo(a + 1.5, y - 3.6); cx.lineTo(b - 1.5, y - 3.6); cx.stroke(); cx.globalAlpha = 1;   // wet shine
+      cx.fillStyle = pc.c;
+      for(let x = Math.ceil(a / 9) * 9; x < b; x += 9){
+        const r = iceRnd(x * .37 + s.sid);
+        cx.beginPath(); cx.arc(x, y - 3.4, 1.2 + 1.5 * r, 0, 7); cx.fill();                                                    // lumps on top
+        if(r > .62){ cx.beginPath(); cx.arc(x + 2, y + 1.6 + 1.6 * r, 1 + r, 0, 7); cx.fill(); }                               // a drip
+      }
+    });
+  });
+  cx.restore();
+}
+function drawPaintStacks(){   // the Paint Stacks above an enemy's head: one dot per stack (the last one is gold)
+  G.f.forEach(e => {
+    const S = e.paint; if(!S || !S.n || e.dead) return;
+    const x0 = e.x - (S.d.max - 1) * 3.6, y = e.y - e.h - 8;
+    for(let i = 0; i < S.d.max; i++){
+      cx.beginPath(); cx.arc(x0 + i * 7.2, y, 2.8, 0, 7);
+      if(i < S.n){ cx.fillStyle = i === S.d.max - 1 ? '#ffd23f' : '#ff5fa2'; cx.fill(); cx.strokeStyle = '#0b0f1c'; cx.lineWidth = 1; cx.stroke(); }
+      else { cx.fillStyle = 'rgba(255,255,255,.14)'; cx.fill(); }
+    }
+  });
+}
+// MASTERPIECE: the giant symbol she paints on the floor (under the fighters): outer circle, five-point star, inner circle. It is drawn stroke by stroke while she paints (k 0..1), then fades after the blast.
+function drawMasterpiece(){
+  G.f.forEach(f => {
+    const Z = f.mp; if(!Z) return;
+    const d = Z.d, R = d.radius * .92, sy = .28, cast = Z.ph === 'cast', k = cast ? clampN((Z.t - Z.Tj) / Z.Tp, 0, 1) : 1;
+    if(cast && k <= 0) return;
+    const circ = (r, n, a0) => Array.from({length:n + 1}, (_, i) => { const a = a0 + i / n * 6.2832; return [Math.cos(a) * r, Math.sin(a) * r]; });
+    const star = [0, 2, 4, 1, 3, 0].map(j => { const a = -1.5708 + j * 1.2566; return [Math.cos(a) * .92, Math.sin(a) * .92]; });
+    const segs = [{p:circ(1, 72, -1.5708), c:0, w:9}, {p:star, c:1, w:8}, {p:circ(.42, 40, -1.5708), c:2, w:7}];
+    const len = p => { let L = 0; for(let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; };
+    const total = segs.reduce((a, q) => a + len(q.p), 0), X = u => Z.x + u * R, Y = v => Z.y0 - R * sy * .5 + v * R * sy, pu = .75 + .25 * Math.sin(G.t * 14);
+    cx.save(); cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.globalAlpha = cast ? 1 : Math.max(0, 1 - Z.ft / (d.fade || .8));
+    cx.fillStyle = 'rgba(255,210,63,' + (.14 * k * pu) + ')'; cx.beginPath(); cx.ellipse(Z.x, Y(0), R, R * sy, 0, 0, 7); cx.fill();
+    let left = k * total, head = null;
+    for(let pass = 0; pass < 2; pass++){
+      left = k * total;
+      for(const q of segs){
+        if(left <= 0) break;
+        cx.strokeStyle = pass ? PAINT_COLS[q.c].c : '#0b0f1c'; cx.lineWidth = pass ? q.w : q.w + 4;
+        cx.beginPath(); cx.moveTo(X(q.p[0][0]), Y(q.p[0][1]));
+        for(let i = 1; i < q.p.length && left > 0; i++){
+          const a = q.p[i - 1], b = q.p[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), t = L > 0 ? Math.min(1, left / L) : 1, ex = a[0] + (b[0] - a[0]) * t, ey = a[1] + (b[1] - a[1]) * t;
+          cx.lineTo(X(ex), Y(ey)); left -= L; head = {x:X(ex), y:Y(ey), c:q.c};
+        }
+        cx.stroke();
+      }
+    }
+    if(cast && k < 1 && head){   // the wet tip: a blob where the paint is landing + a thin drip line up to her brush
+      cx.globalAlpha = .55; cx.strokeStyle = PAINT_COLS[head.c].l; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(head.x, head.y); cx.lineTo(Z.x, f.y - 10); cx.stroke();
+      cx.globalAlpha = 1; cx.fillStyle = PAINT_COLS[head.c].c; cx.beginPath(); cx.arc(head.x, head.y, 6, 0, 7); cx.fill(); cx.strokeStyle = '#0b0f1c'; cx.lineWidth = 2; cx.stroke();
+    }
+    cx.restore();
+  });
+}
 // ---- ETERNAL ICE AGE: cast d.cast s (rooted, any hit interrupts it = only d.failCd cooldown), then d.duration s of ice age. Every enemy is slowed (d.slow) and takes d.dps x THEIR max HP per second.
 // Zerathis gains 1 Frost stack per second for every enemy (max 1 / second / enemy). He moves and attacks normally while it lasts. f.ice = {ph:'cast'|'on'|'fade', t, d, acc:{}} (arena.js draw reads it).
 function iceAgeStep(f, o, dt){
@@ -1811,28 +2734,36 @@ function stepF(f, o, dt){
   if(f.lowG > 0){ f.lowG -= dt; if(f.gr) f.lowG = 0; }                                                   // Winter's Grasp: lifted (half gravity)
   if(f.frz > 0){ f.frz -= dt; f.vx = 0; f.atk = 0; if(f.frz <= 0) thawFx(f); }                           // frozen: no move, no action (gravity still pulls)
   if(f.sc && (f.stun > 0 || f.capturedBy != null || f.onsl || f.slaughter)) endSacredCharge(f);   // hit / caught: the charge is cancelled
+  if(f.fear > 0){ f.fear -= dt; if(Math.random() < dt * 14) G.parts.push({x:f.x + (Math.random() - .5) * 14, y:f.y - f.h - 4, vx:(Math.random() - .5) * 60, vy:-40 - Math.random() * 40, life:.4, col:'#0a0612'}); }
   if(f.arE > 0) f.arE -= dt;                                                                              // armor debuff runs out
   if(f.holy){ f.holy.t -= dt; if(f.holy.t <= 0) f.holy = null; }                                         // Divine Impact glow runs out
   f.atkCd -= dt; f.comboT -= dt; f.aqB -= dt; f.stun -= dt; f.inv -= dt; f.drop -= dt; f.flash -= dt;
   f.sk.forEach(k => { for(let i = 0; i < k.cd.length; i++) k.cd[i] = Math.max(0, k.cd[i] - dt); });   // every charge recharges on its own
   f.uc = Math.max(0, f.uc - dt);
+  if(f.paint) paintStep(f, dt);                                                                           // Miette: Paint Stacks decay
+  if(f.trail && f.trail.length) trailStep(f, dt);                                                         // Miette: Paint Roller trail (sticks to the enemies standing on it)
   chamberStep(f, dt);                                                                                     // Bullet Chamber: reload timer
   if(f.lob) lobStep(f, dt);                                                                               // Explosive Shot wind-up
   if(f.ice) iceAgeStep(f, o, dt);                                                                         // Eternal Ice Age
   if(f.pt > 0){ f.pt -= dt; if(f.pt <= 0) f.bar = 0; }                                                  // passive timer: boost + barrier end together
-  const sp = f.c.spd * 52 * (f.fc ? f.fc.d.speed : 1) * (f.pt > 0 ? 1 + f.K.passive.speed : 1) * (f.slowT > 0 ? 1 - f.slowAmt : 1);   // slowAmt = from the enemy's Putrid Stench
+  const sp = f.c.spd * 52 * (f.fc ? f.fc.d.speed : 1) * (f.pt > 0 ? 1 + f.K.passive.speed : 1) * (f.slowT > 0 ? 1 - f.slowAmt : 1) * paintSlow(f) * (f.roller ? f.roller.d.speed : 1) * (f.rit && f.rit.cast ? f.rit.d.speed : 1);   // slowAmt = from the enemy's Putrid Stench
   if(f.ge) geStep(f, dt);                                                                                  // Pellorin: The Grand Entrance
   if(f.ns) nsStep(f, dt);                                                                                  // Pellorin: No Strings Detached
   if(f.K.passive && f.K.passive.kind === 'momentum') momentumStep(f, dt);                               // Momentum gauge / buff timer
   if(f.fe > 0) f.fe -= dt;                                                                               // False Existence cooldown
   if(f.bl > 0) bleedTick(f, dt);
   if(f.stench) stenchStep(f, o, dt);
-  if(f.K.hold) ({aegis:aegisStep, vomit:vomitStep, sniper:sniperStep}[f.K.hold.kind] || vomitStep)(f, dt);
+  if(f.K.hold) ({aegis:aegisStep, vomit:vomitStep, sniper:sniperStep, roller:rollerStep, ritual:ritualStep}[f.K.hold.kind || 'vomit'] || (() => {}))(f, dt);   // no kind = vomit (Aftertaste); an unknown kind does nothing instead of running the vomit code
   if(f.vclaw) clawStep(f, o, dt);
   if(f.sky) skyStep(f, o, dt);                                                                            // Fulminar: Skyfall
   if(f.storm) stormStep(f, o, dt);                                                                        // Fulminar: Storm of Ruin
+  if(f.re) recoilStep(f, o, dt);                                                                          // Caliber: Recoil Escape
+  if(f.br) bulletRainStep(f, o, dt);                                                                      // Caliber: Bullet Rain
   if(f.afterimg){ f.afterimg.t += dt; if(f.afterimg.t > f.afterimg.life) f.afterimg = null; }
   if(f.slam) slamStep(f, dt);
+  if(f.pq && (f.stun > 0 || f.frz > 0 || f.rec > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.fakeFall)) pqEnd(f);   // Paintquake: a hit / grab before the landing cancels the hop (she falls)
+  if(f.mp && f.mp.ph === 'cast' && (f.stun > 0 || f.frz > 0 || f.rec > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.fakeFall)){ if(f.mp.blasted){ f.mp.ph = 'fade'; f.mp.ft = 0; mpEnd(f, false); } else mpEnd(f, true); }   // Masterpiece: a hit before the explosion cancels it
+  if(f.mp && f.mp.ph === 'fade'){ f.mp.ft += dt; if(f.mp.ft > (f.mp.d.fade || .8)) f.mp = null; }
   if(f.kdT > 0){ f.kdT -= dt; if(f.gr){ f.kdT = 0; f.stun = Math.max(f.stun, f.kdDur); G.shake = Math.max(G.shake, .15); G.rings.push({x:f.x, y:f.y - 4, life:.25}); for(let i = 0; i < 8; i++) G.parts.push({x:f.x + (Math.random() - .5) * 24, y:f.y - 2, vx:(Math.random() - .5) * 320, vy:-Math.random() * 180, life:.4, col:'#8f6bff'}); } }   // KNOCKDOWN after a launch (Void Claw)
   shadowTick(f, dt);
   if(f.capturedBy != null){ f.vx = f.vy = 0; f.atk = 0; f.in.l = f.in.r = 0; f.jq = f.dq = f.aq = false; f.skq = null; return; }   // caught: cannot move, attack or use skills
@@ -1843,16 +2774,19 @@ function stepF(f, o, dt){
   else if(f.shd){ shadowHookStep(f, o, dt); f.skq = null; }
   else if(f.uhand){ handStep(f, o, dt); f.skq = null; }
   else if(f.ls){ lightStep(f, o, dt); }                          // Lightning Step: ball of lightning (own movement, invulnerable)
+  else if(f.mp && f.mp.ph === 'cast'){ mpStep(f, o, dt); f.skq = null; }   // Masterpiece: hop, paint, explode (own movement, no other input)
+  else if(f.pq){ pqStep(f, o, dt); }                              // Paintquake: stomp, hop, smash (own movement, no other input)
   else if(f.sc){ sacredChargeStep(f, o, dt); }                    // Sacred Charge: no jump, no attacks, no other skills (the joystick only steers)
+  else if(f.descent){ fallenDescentStep(f, o, dt); f.skq = null; } // Nethros: Fallen Descent (invulnerable dive & crash)
   else if(f.stun <= 0 && !(f.frz > 0) && !(f.rec > 0)){   // rec = recovering after the Final Curtain: no moving, no attacks
-    const dir = f.rootT > 0 ? 0 : f.in.r - f.in.l;
+    const dir = f.rootT > 0 ? 0 : f.fear > 0 ? f.fearDir : f.in.r - f.in.l;   // FEARED (Nethros aura): they run away from him and cannot steer
     const rooted = f.gr && f.atk > 0 && f.A.root;              // rooted punch: feet stay planted on the ground (no walking while swinging, so no foot sliding)
     const slowCharge = f.charging && f.A.chargeMove;               // Void Orb: he can shuffle slowly while charging (chargeMove = share of his speed)
     if(rooted && !slowCharge){ if(dir && !f.aegis && !f.snipe) f.face = dir; f.vx = approach(f.vx, 0, (f.lunged ? 1800 : 3000) * dt); }
     else if(dir){ f.face = dir; f.vx = approach(f.vx, dir * sp * (slowCharge ? f.A.chargeMove : 1), (f.gr ? 3000 : 1600) * dt); }
     else f.vx = approach(f.vx, 0, (f.gr ? (f.atk > 0 && f.A.lunge ? 1800 : 2600) : 500) * dt);   // lunge slides (momentum) instead of stopping dead
     if(f.rootT > 0) f.vx = 0;
-    if(f.jq && f.jumps > 0 && !f.aegis && !f.snipe && !(f.rootT > 0)){ f.vy = f.jumps === 2 ? -840 : -780; f.jumps--; f.gr = false; }
+    if(f.jq && f.jumps > 0 && !f.aegis && !f.snipe && !(f.rootT > 0)){ f.vy = (f.jumps === 2 ? -840 : -780) * paintJump(f); f.jumps--; f.gr = false; }
     if(f.dq && f.gr && !f.aegis && !f.snipe && !(f.rootT > 0)){ f.drop = .22; f.y += 3; f.gr = false; }
     if(!f.base) f.base = f.A;                                  // basic attack numbers (combo steps are layered on top)
     if(f.aq && f.base.combo) f.aqB = .18;                     // small input buffer, only for combo characters
@@ -1880,6 +2814,9 @@ function stepF(f, o, dt){
       f.atk -= dt;
     }
     if(f.A.skill === 'divineimpact' && !f.impacted && 1 - f.atk / f.A.time >= f.A.impact.at) divineImpact(f, o);   // the shield hits the ground
+    if(f.A.skill === 'gravebound' && !f.gbDone && 1 - f.atk / f.A.time >= f.A.at){ f.gbDone = true; graveSpawn(f); }   // Nethros: the hands crawl out of the floor here
+    if(f.A.skill === 'damned' && !f.damnedDone && 1 - f.atk / f.A.time >= (f.A.at || .35)){ f.damnedDone = true; spawnDamned(f, f.A.gb || slotDef(f, 1)); }   // Nethros: Rise of the Damned summons skeletons
+    if(f.A.skill === 'colorsweep' && !f.swept && 1 - f.atk / f.A.time >= (f.A.sw.at || .5)) sweepHit(f, f.A.sw);   // Miette: Colorful Sweep bursts here
     if(f.A.skill === 'quake' && !f.quaked && 1 - f.atk / f.A.time >= (slotDef(f, 2).at || .55)) quakeHit(f, o);   // Total Extinction lands here
     if(!f.lunged && f.atk < f.A.time * (1 - (f.A.lungeP ?? .54))){ f.lunged = true;   // the stomp: step in / hop at the moment the punch is released
       if(f.A.lunge) f.vx = f.face * f.A.lunge;
@@ -1893,14 +2830,16 @@ function stepF(f, o, dt){
   }
 
   const py = f.y;
-  f.vy = (f.rush || f.fl || (f.shd && f.shd.ph >= 1 && f.shd.ph <= 3)) ? 0 : Math.min(f.vy + GRAV * (f.lowG > 0 ? .5 : 1) * dt, 1200);   // a rush is a straight line (no gravity)
+  f.vy = (f.rush || f.fl || f.pq || (f.shd && f.shd.ph >= 1 && f.shd.ph <= 3)) ? 0 : Math.min(f.vy + GRAV * (f.lowG > 0 ? .5 : 1) * dt, 1200);   // a rush is a straight line (no gravity)
   f.x += f.vx * dt; f.y += f.vy * dt;
   f.gr = false;
-  if(f.vy >= 0 && f.drop <= 0){
+  if(f.vy >= 0 && f.drop <= 0 && !f.pq){
     for(const p of G.P){
-      if(f.x + f.w/2 > p.x && f.x - f.w/2 < p.x + p.w && py <= p.y + 1 && f.y >= p.y){ f.y = p.y; f.vy = 0; f.gr = true; f.jumps = 2; break; }
+      if(f.x + f.w/2 > p.x && f.x - f.w/2 < p.x + p.w && py <= p.y + 1 && f.y >= p.y){ f.y = p.y; f.vy = 0; f.gr = true; f.jumps = 2; if(f.fakeFall) fakeFallEnd(f, false); break; }
     }
+    if(!f.gr && G.sov && G.sov.fakes.length) fakePlatStep(f, py);   // System Override: false platforms (solid only for Errata's team)
   }
+  if(f.fakeFall && f.y > H + 70) fakeFallEnd(f, true);              // fell out of the arena through a false platform: fall damage, then back in
   if(f.y > H + 260 || f.y < -520 || f.x < -260 || f.x > W + 260){ if(f.fc) endFC(f, 'dead'); else ko(f); }   // knocked out of the arena as the beast = the beast is destroyed (Pellorin loses nothing)
 }
 
@@ -1938,6 +2877,15 @@ function think(f, o, dt){
   if(f.K.hold && f.K.hold.kind === 'vomit'){   // held-key attack (Vile Offering): the bot holds ATK when the enemy is a bit away, so the puddle lands near them
     const hd = f.K.hold, mine = G.puddles.filter(p => p.owner === f.idx).length;
     i.held = f.gr && ax < hd.w * .7 + hd.ranges[hd.ranges.length - 1] && ay < 80 && (mine < hd.max || Math.random() < .25) && Math.random() < .55;
+  }
+  if(f.K.hold && f.K.hold.kind === 'roller'){   // Paint Roller (Miette): the bot rolls a paint trail toward the enemy while they are a bit away, then lets go and fights with the brush
+    if(f.roller) i.held = ax > 75 && ax < 430 && f.roller.t < 3;
+    else i.held = f.gr && f.atk <= 0 && ax > 130 && ax < 430 && ay < 90 && Math.random() < (G.cfg.difficulty === 'Hard' ? .5 : .35);
+  }
+  if(f.K.hold && f.K.hold.kind === 'ritual'){   // Dread Ritual (Nethros): the bot channels it when the enemy is inside (or near) the aura, and lets go after a while
+    const hd = f.K.hold;
+    if(f.rit) i.held = false;                                                                      // already active: no need to hold
+    else i.held = f.gr && f.atk <= 0 && !(f.ritCd > 0) && !f.ritLock && ax < hd.radius * .85 && ay < 130 && Math.random() < (G.cfg.difficulty === 'Hard' ? .4 : .25);
   }
   // Estimate a useful fighting distance from this character's actual kit.
   const defs = [...(f.K.skills || []), f.K.ultimate].filter(Boolean);
@@ -2034,6 +2982,16 @@ function think(f, o, dt){
       case 'slaughterhouse':
         if(CAN.slaughterhouse(f, o, d) && Math.hypot(dx, dy) <= d.grab * .9) score = 100;
         break;
+      case 'paintquake': {   // Miette: hop onto the enemy's column and smash (the burst is centred on where she lands)
+        const R = d.range || 320;
+        if(f.gr && ax >= 100 && ax <= R * .95 && ay < 120 && CAN.paintquake(f, o, d, clampN(dx / R, -1, 1), 0, 1)){ score = 60; aimOv = {ax:clampN(dx / R, -1, 1), ay:0, m:1}; }
+        break; }
+      case 'masterpiece':   // Miette: the painting takes a while and any hit stops it, so start it when the enemy is NOT right on her (or is knocked down)
+        if(f.gr && CAN.masterpiece(f) && (Math.hypot(dx, dy) > 160 || o.stun > .4) && Math.hypot(dx, dy) <= d.radius * 1.1) score = 86;
+        break;
+      case 'colorsweep':   // Miette: use it when an enemy is inside the circle (more eager when 2+ are close)
+        if(f.gr || true){ const near = foesOf(f).filter(e => Math.hypot(e.x - f.x, (e.y - e.h / 2) - (f.y - f.h / 2)) <= d.radius * .85).length; if(near) score = near > 1 ? 78 : 62; }
+        break;
       case 'quake':
         if(Math.hypot(dx, dy) <= (d.radius || 0) * .88) score = 84;
         break;
@@ -2057,8 +3015,18 @@ function think(f, o, dt){
         const R = d.range || 380;
         if(ax <= R && ay < 170 && CAN.skyfall(f, o, d, 0, 0, null)){ score = 70; aimOv = {ax:clampN(dx / R, -1, 1), ay:0, m:1}; }
         break; }
+      case 'bulletrain': {   // Caliber ultimate: blanket the enemy's area when in range and on ground
+        const HW = d.halfW || 140;
+        if(f.gr && ax <= (d.range || 480) && ay < 180 && !f.br && CAN.bulletrain(f, o, d, 0, 0, null)){ score = 84; aimOv = {ax:clampN(dx / (d.range || 480), -1, 1), ay:0, m:1}; }
+        break; }
+      case 'recoilescape':   // Caliber II: use it to escape when the enemy is very close
+        if(f.gr && ax < 90 && ay < 80) score = 80;
+        break;
       case 'stormofruin':
         if(!f.storm && ax < 560) score = 82;
+        break;
+      case 'sysoverride':   // Errata: a big arena ultimate, use it when the fight is on
+        if(!G.sov && ax < 600) score = 80;
         break;
       case 'shockwave':
         if(ax >= 82 && ax <= (range || 280) * .94 && ay < 125) score = 74;
@@ -2067,6 +3035,15 @@ function think(f, o, dt){
         const R = d.range || 520, lead = G.cfg.difficulty === 'Easy' ? 0 : .5, adx = Math.abs(dx + (o.vx || 0) * lead);
         if(f.gr && !f.snipe && adx >= d.minR + 20 && adx <= R * .94 && ay < 150){ score = 68; aimOv = {ax:Math.sign(dx) || f.face, ay:0, m:clampN((adx - d.minR) / (R - d.minR), 0, 1)}; }
         break; }
+      case 'gravebound':   // Nethros I: send the hands along the floor when the enemy is on his level, in front of him, within reach
+        if(f.gr && ay < 60 && (o.x - f.x) * f.face > 0 && ax >= 70 && ax <= (d.dist || 0) * .9) score = 76;
+        break;
+      case 'damned':   // Nethros II: summon skeletons if not active or enemy in medium range
+        if(f.gr && (!f.skeletons || !f.skeletons.some(s => s.hp > 0)) && ax < 450) score = 78;
+        break;
+      case 'fallendescent':   // Nethros Ultimate: dive into enemy
+        if(!f.descent && f.gr && ax < 380) score = 88;
+        break;
       case 'rush':
         if(f.gr && verticalOK && ax >= 105 && ax <= (d.dist || 0) * .88) score = 72;
         break;
@@ -2124,8 +3101,8 @@ function update(dt){
   const live = G.f.filter(f => !f.dead);
   live.forEach(f => { f.cur = foeOf(f); });                                                      // everyone picks the enemy they are fighting
   live.forEach(f => { if(f.idx !== 0 && f.cur && (G.mode === 'ai' || f.team === 0)) think(f, f.cur, dt); });   // bots: every fighter but you (sparring: only your allies, the dummies stand still)
-  live.forEach(f => { if(f.cur) stepF(f, f.cur, dt); });
-  stepPuddles(dt); stepVerdicts(dt); stepIceZones(dt); stepErrZones(dt);
+  live.forEach(f => { if(f.cur){ const sv = f.scr ? scrApply(f) : null; stepF(f, f.cur, dt); if(sv) scrRestore(f, sv); } });   // scr = System Override: scrambled controls
+  stepPuddles(dt); stepVerdicts(dt); stepHands(dt); stepSkeletons(dt); stepIceZones(dt); stepErrZones(dt); stepSysOv(dt);
   G.parts.forEach(q => { q.life -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 900 * dt; });
   G.parts = G.parts.filter(q => q.life > 0);
   G.pops.forEach(q => { q.life -= dt; q.y -= 70 * dt; }); G.pops = G.pops.filter(q => q.life > 0);
@@ -2292,6 +3269,7 @@ function drawFrozen(f){   // the ice block around a frozen fighter (a little mor
 }
 
 function drawF(f){
+  if(f.descent && f.descent.ph === 'vanish') return; // Nethros vanished into the heavens
   const x = f.x, y = f.y;
   cx.save();
   if(f.inv > 0 && Math.floor(G.t * 20) % 2) cx.globalAlpha = .45;
@@ -2383,19 +3361,46 @@ function draw(){
   const g = cx.createLinearGradient(0, 0, 0, view.h);
   g.addColorStop(0, '#0a1030'); g.addColorStop(1, '#1a0f2e');
   cx.fillStyle = g; cx.fillRect(0, 0, view.w, view.h);
+  if(G.sov) drawMirrorWorld();                                   // System Override: the collapsing mirror dimension
   const sk = (G.shake || 0) * 60;
   cx.save(); cx.translate(view.ox + (Math.random() - .5) * sk, view.oy + (Math.random() - .5) * sk); cx.scale(view.s, view.s);
   cx.fillStyle = 'rgba(255,255,255,.5)';
   G.stars.forEach(t => cx.fillRect(t.x, t.y, t.r, t.r));
-  G.P.forEach(p => {
+  (G.sov && G.sov.fakes.length ? G.P.concat(G.sov.fakes) : G.P).forEach(p0 => {   // false platforms are drawn EXACTLY like real ones
+    const p = G.sov && G.sov.swapT > 0 ? sovJit(p0) : p0;
     cx.fillStyle = '#232a4d'; cx.beginPath();
     cx.moveTo(p.x, p.y); cx.lineTo(p.x + p.w, p.y);
-    cx.lineTo(p.x + p.w * .88, p.y + p.h + (p.main ? 70 : 30)); cx.lineTo(p.x + p.w * .12, p.y + p.h + (p.main ? 70 : 30));
+    const sl = p.main ? 14 : 10, tp = p.main ? 24 : 10;   // drawn slab + taper thickness only (the hitbox p.h is unchanged)
+    cx.lineTo(p.x + p.w * .9, p.y + sl + tp); cx.lineTo(p.x + p.w * .1, p.y + sl + tp);
     cx.closePath(); cx.fill();
-    cx.fillStyle = '#4a5a94'; cx.fillRect(p.x, p.y, p.w, p.h);
+    cx.fillStyle = '#4a5a94'; cx.fillRect(p.x, p.y, p.w, sl);
     cx.fillStyle = '#7fd0ff'; cx.fillRect(p.x, p.y, p.w, 4);
   });
   drawIceAgeBack();
+  drawPaintTrails();                                             // Miette's Paint Roller trails lie on the floor, under the fighters
+  drawMasterpiece();                                            // Miette's Masterpiece symbol (floor, under the fighters)
+  // Bullet Rain: orange danger zone on the ground during the cast + rain phase
+  G.f.forEach(f => {
+    const C = f.br; if(!C || C.t >= C.total) return;
+    const d = C.d, hw = d.halfW || 140, gy = C.gy, pu = .6 + .4 * Math.sin(G.t * 10);
+    const inRain = C.t >= d.cast + (d.delay || .5);
+    cx.save();
+    cx.fillStyle = inRain ? 'rgba(255,100,30,' + (.18 * pu) + ')' : 'rgba(255,160,60,' + (.12 * pu) + ')';
+    cx.fillRect(C.x - hw, gy - 4, hw * 2, 4);
+    cx.strokeStyle = inRain ? 'rgba(255,130,40,.8)' : 'rgba(255,180,80,.6)';
+    cx.lineWidth = 2; cx.setLineDash([6, 5]);
+    cx.beginPath(); cx.moveTo(C.x - hw, gy - 2); cx.lineTo(C.x + hw, gy - 2); cx.stroke(); cx.setLineDash([]);
+    // small rain-drop icons falling (animated during the rain phase)
+    if(inRain){
+      const done = C.hits.filter(h => h.done).length, pct = done / C.hits.length;
+      cx.fillStyle = 'rgba(255,160,60,.75)';
+      for(let i = 0; i < 9; i++){
+        const rx = C.x - hw + (i + .5) / 9 * 2 * hw, dropY = gy - 10 - ((G.t * 180 + i * 40) % 90) * pct;
+        cx.beginPath(); cx.arc(rx, dropY, 2.5, 0, 7); cx.fill();
+      }
+    }
+    cx.restore();
+  });
   G.puddles.forEach(p => {   // VILE OFFERING: sinister bile pool on the floor (under the fighters): black tar, blood veins, sickly rim, blinking eyes, rising wisps
     const k = Math.min(1, p.age / .25), rx = p.w / 2 * k, ry = 6 * k, x = p.x, y = p.y + 1, T = G.t + p.seed;
     cx.save();
@@ -2526,14 +3531,19 @@ function draw(){
       cx.save(); cx.strokeStyle = 'rgba(180,170,255,.9)'; cx.lineWidth = 3; cx.setLineDash([7, 6]); cx.beginPath(); cx.moveTo(af.x, af.y - 26); cx.lineTo(q.x, q.y - 26); cx.stroke(); cx.setLineDash([]);
       cx.beginPath(); cx.ellipse(q.x, q.y - 26, 20, 34, 0, 0, 7); cx.stroke(); cx.restore();
     }
-  }else if(ad && (ad.kind === 'voidclaw' || ad.kind === 'shadowstep' || ad.kind === 'wintergrasp' || ad.kind === 'crystalcoffin' || ad.kind === 'grandentrance' || ad.kind === 'dimimpale' || ad.kind === 'shatteredgravity' || ad.kind === 'skyfall') && !am.cancel){   // ground-targeted: a marker on the ground spot (grey X = no valid spot)
+  }else if(ad && (ad.kind === 'voidclaw' || ad.kind === 'shadowstep' || ad.kind === 'wintergrasp' || ad.kind === 'crystalcoffin' || ad.kind === 'grandentrance' || ad.kind === 'dimimpale' || ad.kind === 'shatteredgravity' || ad.kind === 'skyfall' || ad.kind === 'bulletrain') && !am.cancel){   // ground-targeted: a marker on the ground spot (grey X = no valid spot)
     const o2 = foeOf(af), ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0, mg = am.drag ? am.m : null;
     const sp = ad.kind === 'shadowstep' ? stepDest(af, o2, ad, ax, ay, mg) : groundAim(af, o2, ad, ax, ay, mg);
     cx.save(); cx.lineWidth = 3;
     if(sp){
       const rx = ad.kind === 'shadowstep' ? 20 : (ad.halfW || ad.radius), ice = ad.kind === 'wintergrasp' || ad.kind === 'crystalcoffin', pu = .6 + .4 * Math.sin(G.t * 10);
-      const zap = ad.kind === 'skyfall', gold = ad.kind === 'grandentrance'; cx.strokeStyle = zap ? 'rgba(120,240,255,.95)' : ice ? 'rgba(160,230,255,.95)' : gold ? 'rgba(255,212,121,.95)' : 'rgba(143,107,255,.9)'; cx.fillStyle = zap ? 'rgba(0,229,255,' + (.22 * pu) + ')' : ice ? 'rgba(95,180,240,' + (.3 * pu) + ')' : gold ? 'rgba(194,59,91,' + (.3 * pu) + ')' : 'rgba(58,26,140,' + (.25 * pu) + ')'; cx.setLineDash([7, 6]); cx.beginPath(); cx.moveTo(af.x, af.y - af.h / 2); cx.lineTo(sp.x, sp.y - 4); cx.stroke(); cx.setLineDash([]);
+      const zap = ad.kind === 'skyfall', gold = ad.kind === 'grandentrance', rain = ad.kind === 'bulletrain'; cx.strokeStyle = zap ? 'rgba(120,240,255,.95)' : rain ? 'rgba(255,160,60,.95)' : ice ? 'rgba(160,230,255,.95)' : gold ? 'rgba(255,212,121,.95)' : 'rgba(143,107,255,.9)'; cx.fillStyle = zap ? 'rgba(0,229,255,' + (.22 * pu) + ')' : rain ? 'rgba(255,100,30,' + (.25 * pu) + ')' : ice ? 'rgba(95,180,240,' + (.3 * pu) + ')' : gold ? 'rgba(194,59,91,' + (.3 * pu) + ')' : 'rgba(58,26,140,' + (.25 * pu) + ')'; cx.setLineDash([7, 6]); cx.beginPath(); cx.moveTo(af.x, af.y - af.h / 2); cx.lineTo(sp.x, sp.y - 4); cx.stroke(); cx.setLineDash([]);
       cx.beginPath(); cx.ellipse(sp.x, sp.y - 2, rx, rx * .28, 0, 0, 7); cx.fill(); cx.stroke();
+      if(rain){   // Bullet Rain: show rain-drops pattern to signal the dense shrapnel width
+        cx.save(); cx.globalAlpha = .55 * pu; cx.fillStyle = 'rgba(255,160,60,1)';
+        for(let i = 0; i < 7; i++){ const rxi = sp.x - rx + (i + .5) / 7 * 2 * rx; cx.beginPath(); cx.moveTo(rxi, sp.y - 18); cx.lineTo(rxi - 1.5, sp.y - 2); cx.lineTo(rxi + 1.5, sp.y - 2); cx.closePath(); cx.fill(); }
+        cx.restore();
+      }
       if(ad.kind === 'voidclaw'){ cx.beginPath(); cx.moveTo(sp.x - rx, sp.y - 2); cx.lineTo(sp.x - rx, sp.y - ad.height * .35); cx.moveTo(sp.x + rx, sp.y - 2); cx.lineTo(sp.x + rx, sp.y - ad.height * .35); cx.globalAlpha = .4; cx.stroke(); }
     }else{
       const R = ad.range || 300, bx = af.x + ax * (mg == null ? .7 : Math.max(.25, mg)) * R, by = af.y - af.h / 2;
@@ -2548,6 +3558,22 @@ function draw(){
     if(a.ground){ cx.strokeStyle = 'rgba(255,170,60,.95)'; cx.fillStyle = 'rgba(255,106,26,' + (.2 * pu) + ')'; cx.lineWidth = 2.5; cx.beginPath(); cx.ellipse(a.tx, a.ty - 2, ad.radius, ad.radius * .28, 0, 0, 7); cx.fill(); cx.stroke(); cx.beginPath(); cx.arc(a.tx, a.ty - 2, 4, 0, 7); cx.fillStyle = 'rgba(255,200,120,.95)'; cx.fill(); }
     else{ cx.strokeStyle = 'rgba(190,190,200,.8)'; cx.beginPath(); cx.moveTo(a.tx - 9, a.ty - 9); cx.lineTo(a.tx + 9, a.ty + 9); cx.moveTo(a.tx + 9, a.ty - 9); cx.lineTo(a.tx - 9, a.ty + 9); cx.stroke(); }
     cx.restore();
+  }else if(ad && ad.kind === 'paintquake' && !am.cancel){   // Paintquake: dotted HOP ARC (same maths as paintquake() / pqStep) + paint circle where she lands (grey X = no ground there)
+    const o2 = foeOf(af), ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0, mg = am.drag ? am.m : null, g = groundAim(af, o2, ad, ax, ay, mg), pu = .6 + .4 * Math.sin(G.t * 10);
+    cx.save(); cx.lineWidth = 3; cx.lineCap = 'round';
+    if(g){
+      const dist = Math.abs(g.x - af.x), H = 70 + dist * .15 + Math.max(0, g.y - af.y) * .3;
+      cx.strokeStyle = 'rgba(255,95,162,.95)'; cx.setLineDash([3, 8]); cx.beginPath();
+      for(let i = 0; i <= 24; i++){ const k = i / 24, px = af.x + (g.x - af.x) * k, py = af.y + (g.y - af.y) * k - H * 4 * k * (1 - k); i ? cx.lineTo(px, py) : cx.moveTo(px, py); }
+      cx.stroke(); cx.setLineDash([]);
+      cx.fillStyle = 'rgba(255,210,63,' + (.22 * pu) + ')'; cx.strokeStyle = 'rgba(255,95,162,.95)'; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.ellipse(g.x, g.y - 2, ad.radius, ad.radius * .28, 0, 0, 7); cx.fill(); cx.stroke();
+      cx.beginPath(); cx.arc(g.x, g.y - 2, 4, 0, 7); cx.fillStyle = 'rgba(47,208,196,.95)'; cx.fill();
+    }else{
+      const R = ad.range || 430, bx = af.x + ax * (mg == null ? .8 : Math.max(.25, mg)) * R, by = af.y - af.h / 2;
+      cx.strokeStyle = 'rgba(190,190,200,.8)'; cx.beginPath(); cx.moveTo(bx - 9, by - 9); cx.lineTo(bx + 9, by + 9); cx.moveTo(bx + 9, by - 9); cx.lineTo(bx - 9, by + 9); cx.stroke();
+    }
+    cx.restore();
   }else if(ad && ad.aim && !am.cancel){   // aim preview while dragging a skill button: a dashed line the way the skill will go
     const rushK = ad.kind === 'rush', ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0;
     const dx = rushK ? (Math.sign(ax) || af.face) : ax, dy = rushK ? 0 : ay, len = rushK ? ad.dist : (ad.range || ad.speed * ad.life), y0 = af.y - (rushK ? af.h / 2 : 34);
@@ -2555,7 +3581,7 @@ function draw(){
     cx.beginPath(); cx.moveTo(af.x, y0); cx.lineTo(af.x + dx * len, y0 + dy * len); cx.stroke(); cx.setLineDash([]);
     cx.beginPath(); cx.arc(af.x + dx * len, y0 + dy * len, 6, 0, 7); cx.fill(); cx.restore();
   }
-  drawVerdicts(); drawIceZones(); drawErrZones(); drawIceAgeFront(); drawSkyZones(); drawStormClouds(); drawBolts();
+  drawVerdicts(); drawHands(); drawDescentOmen(); drawSkeletons(); drawIceZones(); drawErrZones(); drawSovFx(); drawPaintStacks(); drawIceAgeFront(); drawSkyZones(); drawStormClouds(); drawBolts();
   G.waves.forEach(q => { const k = 1 - q.life / q.max; cx.globalAlpha = (1 - k) * .85; cx.strokeStyle = q.col || '#ffb347'; cx.lineWidth = 2 + 9 * (1 - k);
     cx.beginPath(); cx.arc(q.x, q.y, q.r * k, 0, 7); cx.stroke(); cx.globalAlpha = (1 - k) * .16; cx.fillStyle = q.fill || '#ff8a2a'; cx.fill(); });   // Total Extinction shockwave
   cx.globalAlpha = 1;
@@ -2568,6 +3594,7 @@ function draw(){
   });
   cx.globalAlpha = 1;
   cx.restore();
+  drawSovHud();
 
 const big = (G.cfg.size || 1) > 1;
 G.f.forEach(f => {
@@ -2622,8 +3649,13 @@ function loop(t){
   if(!G) return;
   raf = requestAnimationFrame(loop);
   const dt = Math.min(.033, (t - G.last) / 1000 || 0); G.last = t;
-  if(!G.paused){ if(G.hs > 0) G.hs -= dt; else { G.t += dt; if(!G.over) update(dt); } }   // G.hs = hit-stop (short freeze on heavy hits)
-  syncBtns(); draw();
+  try{
+    if(!G.paused){ if(G.hs > 0) G.hs -= dt; else { G.t += dt; if(!G.over) update(dt); } }   // G.hs = hit-stop (short freeze on heavy hits)
+    syncBtns(); draw();
+  }catch(err){   // a bug shows its message on the canvas (and in the console) instead of a silent black screen
+    console.error(err); cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height);
+    cx.fillStyle = '#ff6b6b'; cx.font = '14px monospace'; String(err && err.stack || err).split('\n').slice(0, 6).forEach((l, i) => cx.fillText(l, 12, 24 + i * 18));
+  }
 }
 
 $('#againBtn').onclick = () => G && startMatch(G.cfg);
@@ -2649,12 +3681,12 @@ addEventListener('keydown', e => {
 
 // ---- SKILL INFO: the (i) button above the ultimate opens a side panel (overlay, not a modal). The match is frozen while it is open and continues when you close it.
 //      Each row: name, type, cooldown, damage (shown for THIS opponent: same formula as a hit, ~ = rounded) and the text. Text = `desc` in the character's skills.js (optional), `type` overrides the type label.
-const KIND_TYPE = {dimimpale:'Ground target - Mirror + Teleport', shatteredgravity:'Ground target - Pull zone', grandentrance:'Ground target - Stomp', nostrings:'Aimed - piercing line', wintergrasp:'Ground target - Launch + Frost', crystalcoffin:'Ground target - Immobilize', iceage:'Arena - Ultimate', shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', sniper:'Held key - aimed shot', lobshot:'Arc projectile - area blast', slaughterhouse:'Grab - Ultimate', marks:'Passive', lightningstep:'Transform - Invulnerable dash', skyfall:'Ground target - Lightning strikes', stormofruin:'Arena - Ultimate'};
+const KIND_TYPE = {dimimpale:'Ground target - Mirror + Teleport', shatteredgravity:'Ground target - Pull zone', grandentrance:'Ground target - Stomp', nostrings:'Aimed - piercing line', wintergrasp:'Ground target - Launch + Frost', crystalcoffin:'Ground target - Immobilize', iceage:'Arena - Ultimate', shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', sniper:'Held key - aimed shot', lobshot:'Arc projectile - area blast', slaughterhouse:'Grab - Ultimate', marks:'Passive', lightningstep:'Transform - Invulnerable dash', skyfall:'Ground target - Lightning strikes', stormofruin:'Arena - Ultimate', sysoverride:'Arena - Ultimate', roller:'Held key - paint trail', colorsweep:'Area - 360 sweep', paintquake:'Ground target - Hop + slam', masterpiece:'Area - Ultimate', ritual:'Held key - Fear aura', gravebound:'Ground wave - crawling hands', recoilescape:'Aerial repositioning - rear burst', bulletrain:'Ground target - Area denial', damned:'Summon - 3 Skeleton Warriors', fallendescent:'Sky Dive - Dark Shockwave'};
 const dmgNum = (f, o, m) => Math.round((10 + f.c.hp / 40) * 2.2 * (1 - armOf(o) / 50) * m);
 function infoRows(){
   const f = G.f[0], o = foeOf(f), K = f.K, rows = [], B = K.basic;
   const cdTxt = d => d.charges > 1 ? d.charges + ' charges, ' + d.recharge + 's each' : d.cd != null ? d.cd + 's' : '-';
-  const dmgTxt = d => d.kind === 'finalcurtain' ? d.combo.map(c => c.fixed).join(' / ') + ' (beast, ' + d.combo.reduce((a, c) => a + c.fixed, 0) + ' total)' : d.kind === 'abysshand' ? '~' + dmgNum(f, o, d.ticks * d.tickDmg + d.crushDmg + d.slamDmg) + ' total' : d.kind === 'shadowstep' ? '-' : d.kind === 'skyfall' || d.kind === 'stormofruin' ? '~' + dmgNum(f, o, d.dmg) + ' / strike' : d.kind === 'lightningstep' ? '~' + dmgNum(f, o, d.dmg) + ' / hit' : d.tickDmg ? '~' + dmgNum(f, o, Math.floor((d.frenzy || 1.5) / (d.tick || .09)) * d.tickDmg + d.finishDmg) + ' total' : d.hits ? '~' + dmgNum(f, o, d.hits.reduce((a, h) => a + h.dmg, 0)) + ' total' : d.dps ? '~' + Math.round(o.max * d.dps) + '/s' : d.dmg ? '~' + dmgNum(f, o, d.dmg) : '-';
+  const dmgTxt = d => d.kind === 'finalcurtain' ? d.combo.map(c => c.fixed).join(' / ') + ' (beast, ' + d.combo.reduce((a, c) => a + c.fixed, 0) + ' total)' : d.kind === 'damned' ? '~' + dmgNum(f, o, .5) + ' / ~' + dmgNum(f, o, .7) + ' / ~' + dmgNum(f, o, 1.3) + ' (3 skeletons)' : d.kind === 'abysshand' ? '~' + dmgNum(f, o, d.ticks * d.tickDmg + d.crushDmg + d.slamDmg) + ' total' : d.kind === 'shadowstep' ? '-' : d.kind === 'skyfall' || d.kind === 'stormofruin' ? '~' + dmgNum(f, o, d.dmg) + ' / strike' : d.kind === 'lightningstep' ? '~' + dmgNum(f, o, d.dmg) + ' / hit' : d.tickDmg ? '~' + dmgNum(f, o, Math.floor((d.frenzy || 1.5) / (d.tick || .09)) * d.tickDmg + d.finishDmg) + ' total' : d.hits ? '~' + dmgNum(f, o, d.hits.reduce((a, h) => a + h.dmg, 0)) + ' total' : d.dps ? '~' + Math.round(o.max * d.dps) + '/s' : d.dmg ? '~' + dmgNum(f, o, d.dmg) : '-';
   rows.push({tag:'ATK', name:'Basic attack', type:B.combo ? B.combo.length + '-hit combo' : 'Basic attack', cd:'-', dmg:B.combo ? '~' + B.combo.map(c => dmgNum(f, o, c.dmg ?? B.dmg)).join(' / ') : '~' + dmgNum(f, o, B.dmg), desc:B.desc});
   if(K.passive) rows.push({tag:'PAS', name:K.passive.name, type:K.passive.type || 'Passive', cd:K.passive.cd ? K.passive.cd + 's' : '-', dmg:K.passive.dps ? '~' + Math.round(o.max * K.passive.dps) + '/s bleed' : '-', desc:K.passive.desc});
   if(B.unleash) rows.push({tag:'HOLD', name:B.unleash.name, type:'Held key - charge', cd:'-', dmg:'~' + dmgNum(f, o, B.unleash.base * 1.25) + ' - ~' + dmgNum(f, o, B.unleash.base * 2), desc:B.unleash.desc});

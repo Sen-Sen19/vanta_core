@@ -1,8 +1,9 @@
-// PELLORIN art - the String Master. Same shared ragdoll (body.js): small size changes, red coat, top hat, short cape.
+// PELLORIN art - The Twisted Performer. Same shared ragdoll (body.js): slim performer proportions, Victorian ringmaster tailcoat, slicked hair, sewn grin. No hat, no cape.
 // The PUPPET is also made here. arena.js has no puppet, so this file keeps the puppet state on the fighter (f.pup),
 // moves it and checks its hit once per frame inside front(), using the game clock G.t (so pause and hit-stop work). It calls hurt() from arena.js for damage.
 // Hooks used: body, colors, spring(), attack() = his hand moves like a puppeteer, pose() = hand held forward holding the strings,
-//             behind() = cape, front() = hat, bow tie, strings, puppet.
+//             torso() = tailcoat, shirt, lapels, cravat, buttons, neck. behind() = split coat tails.
+//             front() = hair, face (void eyes + sewn grin), near sleeve + cuff, strings, puppet (puppet code unchanged).
 // Numbers (damage, reach, beast time) are in skills.js. Timing of the puppet moves (SHAPE below) uses the same progress p as skills.js.
 (() => {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -447,10 +448,89 @@
       cx.fillStyle = '#ffb03a'; cx.fillRect(P.x - 10, P.y - an.lift - 28 * sc - 6, 20 * k, 1.4); }
   }
 
+  // ---- PELLORIN'S LOOK: Victorian ringmaster. Palette + small drawing helpers (visual only). ----
+  const COAT = '#2b2336', COAT_FAR = '#18121f', TROUSER = '#241d2d', TROUSER_FAR = '#16111c', BOOT = '#08060a';
+  const LINING = '#85122a', IVORY = '#e8dcc2', SHIRT = '#f4eee0', EMB = '#efe5cc';
+  const SKIN = '#ecdfca', SKIN_SH = '#d6c5aa', HAIR = '#07050a', THREAD = '#120a0f', MOUTH = '#240a10', EDGE = '#0b0f1c';
+  const GOLD_HI = '#fff1bb';
+  const AW = {u:3.5, f:3.2, hand:2.4, ow:.8};          // sleeve widths / hand radius / outline (same numbers as body below: the near arm is redrawn over his face)
+
+  const qb = (p0, c, p1, u) => ({x:(1 - u) * (1 - u) * p0.x + 2 * (1 - u) * u * c.x + u * u * p1.x, y:(1 - u) * (1 - u) * p0.y + 2 * (1 - u) * u * c.y + u * u * p1.y});
+  function goldBtn(cx, x, y, r){                          // polished gold button
+    cx.fillStyle = EDGE; cx.beginPath(); cx.arc(x, y, r + .5, 0, 7); cx.fill();
+    cx.fillStyle = GOLD; cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill();
+    cx.fillStyle = GOLD_HI; cx.beginPath(); cx.arc(x - r * .3, y - r * .32, r * .38, 0, 7); cx.fill();
+  }
+  // tailcoat body in torso space (origin = pelvis, up = -y, x = forward). L = torso length.
+  function coatPath(cx, L){
+    cx.beginPath(); cx.moveTo(-3.1, 3.6);
+    cx.quadraticCurveTo(-2.2, -L * .38, -3.5, -L + 1.3);          // back, pinched at the waist
+    cx.quadraticCurveTo(-3.7, -L - .5, -1.6, -L - .6);            // narrow shoulder
+    cx.lineTo(1.6, -L - .6);
+    cx.quadraticCurveTo(3.7, -L - .5, 3.6, -L + 1.3);
+    cx.quadraticCurveTo(3.1, -L * .5, 2.5, -3.2);                 // chest to the waist
+    cx.quadraticCurveTo(2.9, 1.4, .3, 4.1);                       // cutaway front hem
+    cx.quadraticCurveTo(-1.4, 4.6, -3.1, 3.6); cx.closePath();
+  }
+  // sleeve end: fine ivory embroidery rings + a gold cuff stud. q = arm {el, hand}. Drawn in fighter space.
+  function cuff(cx, q, far){
+    const dx = q.hand.x - q.el.x, dy = q.hand.y - q.el.y, n = Math.hypot(dx, dy) || 1, ux = dx / n, uy = dy / n, px = -uy, py = ux;
+    const at = (d, o) => ({x:q.hand.x - ux * d + px * o, y:q.hand.y - uy * d + py * o}), hw = AW.f / 2 + .15;
+    cx.save(); cx.lineCap = 'butt';
+    cx.strokeStyle = far ? 'rgba(239,229,204,.75)' : EMB; cx.lineWidth = .55;
+    [AW.hand + 1.2, AW.hand + 3.1].forEach(d => { const a = at(d, -hw), b = at(d, hw); cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke(); });
+    cx.setLineDash([.5, .5]); cx.lineWidth = .45;
+    const m0 = at(AW.hand + 1.2, 0), m1 = at(AW.hand + 3.1, 0);     // dotted trim between the rings, both edges
+    [-hw * .55, hw * .55].forEach(o => { const a = at(AW.hand + 1.2, o), b = at(AW.hand + 3.1, o); cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke(); });
+    cx.setLineDash([]);
+    const g = at(AW.hand + 2.15, 0); if(!far) goldBtn(cx, g.x, g.y, .6);
+    cx.restore();
+  }
+  // face on the head, in the head's own tilted space (origin = head centre, x = forward). Pale ivory skin, void eyes, sewn grin, slicked hair.
+  function face(cx, t){
+    // skin: faint shadows + small imperfections (no gloss, nothing porcelain)
+    cx.fillStyle = 'rgba(120,92,74,.16)'; cx.beginPath(); cx.ellipse(1.0, 1.6, 2.4, .9, .15, 0, 7); cx.fill();            // cheekbone hollow
+    cx.fillStyle = 'rgba(96,64,78,.24)'; cx.beginPath(); cx.ellipse(2.6, .35, 1.8, .5, .35, 0, 7); cx.fill();              // tired shadow under the eye
+    cx.fillStyle = 'rgba(112,84,66,.55)'; [[3.3, 1.2, .24], [.8, .2, .18], [1.6, 5.0, .18], [4.2, .2, .16]].forEach(([x, y, r]) => { cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill(); });
+    cx.fillStyle = SKIN_SH; cx.strokeStyle = 'rgba(40,24,30,.65)'; cx.lineWidth = .45;                                    // ear
+    cx.beginPath(); cx.ellipse(-2.5, .5, .9, 1.4, .1, 0, 7); cx.fill(); cx.stroke();
+    cx.fillStyle = SKIN; cx.strokeStyle = EDGE; cx.lineWidth = .8; cx.lineJoin = 'round';                                  // sharp nose
+    cx.beginPath(); cx.moveTo(5.0, -.6); cx.lineTo(7.0, 1.6); cx.lineTo(5.2, 2.0); cx.closePath(); cx.fill(); cx.stroke();
+    cx.fillStyle = SKIN; cx.beginPath(); cx.moveTo(4.9, -.4); cx.lineTo(6.2, 1.3); cx.lineTo(5.1, 1.8); cx.closePath(); cx.fill();
+    // sharp slanted void eyes: solid black, no pupil / iris / sclera / glow. Outer corner high, inner corner low.
+    cx.fillStyle = '#000';
+    cx.beginPath(); cx.moveTo(.1, -1.8); cx.lineTo(1.9, -1.4); cx.lineTo(3.2, -.1); cx.lineTo(1.8, -.45); cx.closePath(); cx.fill();
+    cx.beginPath(); cx.moveTo(3.8, -1.2); cx.lineTo(4.7, -.7); cx.lineTo(4.7, .1); cx.lineTo(3.9, -.3); cx.closePath(); cx.fill();
+    cx.strokeStyle = HAIR; cx.lineWidth = .45; cx.lineCap = 'round';                                                       // thin brow
+    cx.beginPath(); cx.moveTo(-.4, -2.6); cx.lineTo(3.2, -1.3); cx.stroke(); cx.beginPath(); cx.moveTo(3.7, -1.6); cx.lineTo(4.8, -1.2); cx.stroke();
+    // GRUESOME PUPPET SMILE: a very wide crescent, corners pulled up toward both cheeks
+    const A = {x:-.3, y:2.6}, B = {x:4.7, y:2.5}, cU = {x:2.2, y:4.0}, cL = {x:2.2, y:6.1};
+    cx.fillStyle = MOUTH; cx.beginPath(); cx.moveTo(A.x, A.y); cx.quadraticCurveTo(cL.x, cL.y, B.x, B.y); cx.quadraticCurveTo(cU.x, cU.y, A.x, A.y); cx.closePath(); cx.fill();
+    cx.strokeStyle = THREAD; cx.lineWidth = .32; cx.lineCap = 'round';                                                    // fine dark stitches across the lips, uneven spacing
+    [.14, .26, .37, .52, .63, .78, .88].forEach((u, i) => {
+      const a = qb(A, cU, B, u), b = qb(A, cL, B, u), j = Math.sin(i * 7.3) * .3, k = .25 + .15 * Math.sin(i * 3.1);
+      cx.beginPath(); cx.moveTo(a.x + j, a.y - k); cx.lineTo(b.x - j * .6, b.y + k * .9); cx.stroke();
+    });
+    cx.lineWidth = .5;                                                                                                      // larger, uneven X stitches at both corners
+    cx.beginPath(); cx.moveTo(-1.3, 1.8); cx.lineTo(.6, 3.7); cx.moveTo(-1.1, 3.6); cx.lineTo(.5, 1.9); cx.stroke();
+    cx.beginPath(); cx.moveTo(3.9, 1.7); cx.lineTo(5.4, 3.4); cx.moveTo(4.1, 3.5); cx.lineTo(5.3, 2.0); cx.stroke();
+    cx.lineWidth = .32; cx.beginPath(); cx.moveTo(-.3, 2.6); cx.lineTo(-1.9, 2.0); cx.moveTo(4.7, 2.5); cx.lineTo(5.6, 1.9); cx.stroke();   // pulled cheek seams
+  }
+  function hair(cx, white){                              // short, neat, jet-black, slicked straight back
+    cx.beginPath(); cx.moveTo(3.7, -3.5);
+    cx.quadraticCurveTo(5.0, -5.4, 2.3, -6.7); cx.quadraticCurveTo(-1.3, -8.0, -4.7, -5.4);
+    cx.quadraticCurveTo(-7.1, -3.0, -6.4, .9); cx.quadraticCurveTo(-6.0, 2.7, -4.4, 3.1);
+    cx.quadraticCurveTo(-4.0, .8, -2.7, -.7); cx.quadraticCurveTo(-.2, -2.0, 1.0, -3.3); cx.quadraticCurveTo(2.4, -4.3, 3.7, -3.5); cx.closePath();
+    cx.fillStyle = white ? '#fff' : HAIR; cx.fill(); cx.strokeStyle = EDGE; cx.lineWidth = .8; cx.lineJoin = 'round'; cx.stroke();
+    if(white) return;
+    cx.strokeStyle = 'rgba(70,60,84,.65)'; cx.lineWidth = .35; cx.lineCap = 'round';   // faint comb lines (no shine)
+    [[3.0, -5.4, -.4, -6.7, -4.4, -4.6], [2.9, -4.4, -.6, -5.4, -5.3, -2.4], [1.6, -3.6, -1.6, -4.2, -5.7, -.6]].forEach(([x0, y0, cxx, cy, x1, y1]) => { cx.beginPath(); cx.moveTo(x0, y0); cx.quadraticCurveTo(cxx, cy, x1, y1); cx.stroke(); });
+  }
+
   Characters.art('pellorin', {
-    // a little taller and slim. Hitbox is still 30x52 (arena.js is not changed per character).
-    body: {head:{r:6.3}, torso:{len:12.5, w:10.5}, uArm:{len:9.5, w:4.2}, fArm:{len:9.5, w:3.8}, hand:{r:2.9}, shN:1, shF:-3.5, thigh:{len:10.5, w:5.4}, shin:{len:10, w:4.6}, foot:{len:7.5, w:3.4}},
-    colors: {shirt:'#b8324f', limb:'#d9486a', far:'#7e2036', legs:'#2a1830', legsFar:'#1c1022', head:'#f0d9c8', dark:'#2a1020', hand:'#f2e6d8'},
+    // SLIM PERFORMER: tall and narrow. Same joint lengths as before, so hands / feet / ground contact keep their numbers; only the widths shrink. Hitbox is still 30x52 (arena.js is not changed per character).
+    body: {head:{r:5.8}, torso:{len:13, w:8.4}, uArm:{len:9.5, w:AW.u}, fArm:{len:9.5, w:AW.f}, hand:{r:AW.hand}, shN:1, shF:-3.5, thigh:{len:11, w:4.5}, shin:{len:10.5, w:3.9}, foot:{len:7.5, w:3.2}, outlineW:AW.ow},
+    colors: {shirt:COAT, limb:COAT, far:COAT_FAR, legs:TROUSER, legsFar:TROUSER_FAR, head:SKIN, dark:BOOT, hand:SKIN},
 
     // THE FINAL CURTAIN (arena.js drawF calls this INSTEAD of the ragdoll while f.fc is on): the floating dancer (a separate ragdoll, f.fc.ghost) + the monster body + the bars.
     fcDraw(cx, f, t){
@@ -503,15 +583,60 @@
       tg.aN += idle * (.55 + b * .05); tg.eN += idle * .35; tg.aF += idle * -.05; tg.head += idle * .02;
     },
 
-    // short cape that streams back with his speed
+    // TAILCOAT (drawn by body.js INSTEAD of the plain torso capsule): neck, black fitted coat, ivory lapels + embroidery, red lining, ruffled shirt, red cravat, gold buttons.
+    // Drawn here (under the head and the near arm) so the arm and the head still cover it correctly.
+    torso(cx, S, B, P, white){
+      const L = B.torso.len, ow = B.outlineW;
+      Body.capsule(cx, S.sh, S.head, 3.4 + ow * 2, B.outline); Body.capsule(cx, S.sh, S.head, 3.4, white ? '#fff' : SKIN_SH);   // neck
+      cx.save(); cx.translate(S.pel.x, S.pel.y); cx.rotate(S.lean);
+      coatPath(cx, L); cx.fillStyle = white ? '#fff' : COAT; cx.fill();
+      if(!white){
+        cx.save(); coatPath(cx, L); cx.clip();
+        cx.strokeStyle = LINING; cx.lineWidth = 2.2; cx.lineCap = 'round';                                                    // deep-red lining along the cutaway hem
+        cx.beginPath(); cx.moveTo(2.5, -3.2); cx.quadraticCurveTo(2.9, 1.4, .3, 4.1); cx.quadraticCurveTo(-1.4, 4.6, -3.1, 3.6); cx.stroke();
+        cx.fillStyle = SHIRT; cx.beginPath(); cx.moveTo(1.3, -L - .7); cx.lineTo(4.2, -L - .7); cx.lineTo(4.2, -L * .55); cx.lineTo(3.0, -L * .33); cx.lineTo(2.2, -L * .5); cx.closePath(); cx.fill();   // shirt front
+        cx.fillStyle = SHIRT; cx.strokeStyle = 'rgba(40,24,30,.55)'; cx.lineWidth = .4;                                       // subtle ruffles down the shirt front
+        for(let i = 0; i < 4; i++){ const y = -L + 3.7 + i * 1.5; cx.beginPath(); cx.arc(1.7 + (i % 2) * .35, y, .85, Math.PI * .5, Math.PI * 1.5); cx.fill(); cx.stroke(); }
+        cx.fillStyle = IVORY; cx.strokeStyle = THREAD; cx.lineWidth = .5; cx.lineJoin = 'round';                              // ivory lapel
+        cx.beginPath(); cx.moveTo(-.3, -L - .7); cx.lineTo(1.5, -L - .7); cx.lineTo(2.4, -L * .52); cx.lineTo(2.9, -3.9); cx.lineTo(1.7, -4.3); cx.lineTo(.2, -L * .62); cx.closePath(); cx.fill(); cx.stroke();
+        cx.strokeStyle = EMB; cx.lineWidth = .5; cx.setLineDash([.6, .5]);                                                    // fine ivory embroidery along the lapel edge
+        cx.beginPath(); cx.moveTo(-1.3, -L + .2); cx.quadraticCurveTo(-1.2, -L * .66, .5, -4.3); cx.stroke(); cx.setLineDash([]);
+        cx.restore();
+      }
+      coatPath(cx, L); cx.lineWidth = ow * 1.5; cx.strokeStyle = B.outline; cx.lineJoin = 'round'; cx.stroke();
+      if(!white){
+        goldBtn(cx, .2, -5.4, .75); goldBtn(cx, .3, -3.0, .75);                                                               // polished gold buttons
+        cx.fillStyle = IVORY; cx.strokeStyle = THREAD; cx.lineWidth = .4;                                                     // collar points
+        cx.beginPath(); cx.moveTo(-.9, -L - .5); cx.lineTo(.2, -L - 3.3); cx.lineTo(1.0, -L - .3); cx.closePath(); cx.fill(); cx.stroke();
+        cx.beginPath(); cx.moveTo(2.4, -L - .5); cx.lineTo(2.1, -L - 3.1); cx.lineTo(1.2, -L - .3); cx.closePath(); cx.fill(); cx.stroke();
+        cx.fillStyle = LINING; cx.strokeStyle = EDGE; cx.lineWidth = .6;                                                      // deep-red cravat: flap + knot
+        cx.beginPath(); cx.moveTo(.2, -L - .2); cx.lineTo(2.4, -L - .2); cx.lineTo(2.1, -L + 3.6); cx.lineTo(1.2, -L + 2.7); cx.lineTo(.3, -L + 3.8); cx.closePath(); cx.fill(); cx.stroke();
+        cx.beginPath(); cx.ellipse(1.3, -L - 1.2, 2.3, 1.4, 0, 0, 7); cx.fill(); cx.stroke();
+        cx.fillStyle = GOLD; cx.beginPath(); cx.arc(1.3, -L + .5, .45, 0, 7); cx.fill();                                      // cravat pin
+      }
+      cx.restore();
+    },
+
+    // SPLIT COAT TAILS (not a cape): two narrow tapered panels from the waist with a red V between them. They trail behind when he runs, lift when he falls, sway when idle.
     behind(cx, f, t, S, P){
-      const drag = clamp(-(f.vx * f.face) * .045, -3, 12), sw = Math.sin(t * 2.4) * 1;
-      const x0 = S.sh.x - 2, y0 = S.sh.y - 1, yb = S.pel.y + 9 + (f.gr ? 0 : -3);
-      cx.beginPath(); cx.moveTo(x0, y0);
-      cx.quadraticCurveTo(x0 - 7 - drag * .5, (y0 + yb) / 2, x0 - 9 - drag + sw, yb);
-      cx.lineTo(x0 - 3 + sw * .4, yb - 1.5); cx.lineTo(x0 + 1, yb); cx.quadraticCurveTo(x0 + 2, (y0 + yb) / 2, x0 + 2, y0 + 3); cx.closePath();
-      cx.fillStyle = f.flash > 0 ? '#fff' : '#5a1428'; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = 1.2; cx.lineJoin = 'round'; cx.stroke();
-      if(f.flash <= 0){ cx.strokeStyle = GOLD; cx.lineWidth = .8; cx.beginPath(); cx.moveTo(x0 - 9 - drag + sw, yb); cx.lineTo(x0 - 3 + sw * .4, yb - 1.5); cx.stroke(); }
+      const white = f.flash > 0, st = f._tl || (f._tl = {x:0, l:1, t:t});
+      const dt = clamp(t - st.t, 0, .05); st.t = t;
+      const vf = f.vx * f.face, air = !f.gr, k = Math.min(1, dt * 9);
+      st.x += (-clamp(vf * .05, -3, 9) - S.lean * 5 - st.x) * k;
+      st.l += ((air ? clamp(1 - f.vy / 1100, .62, 1.12) : 1 - clamp(Math.abs(vf) * .0012, 0, .12)) - st.l) * k;
+      const sw = Math.sin(t * 2.4) * .9 + Math.sin(t * 7.3) * clamp(Math.abs(vf) * .004, 0, 1.2), Lt = 15.5 * st.l;
+      const c = Math.cos(S.lean), s = Math.sin(S.lean), loc = (x, y) => ({x:S.pel.x + x * c - y * s, y:S.pel.y + x * s + y * c});
+      const panel = (a, b, tx, ty, wd, col) => {
+        const tl = {x:tx - wd, y:ty}, tr = {x:tx + wd, y:ty - .3};
+        cx.beginPath(); cx.moveTo(a.x, a.y); cx.quadraticCurveTo((a.x + tl.x) / 2 + sw * .4, (a.y + ty) / 2 - 1, tl.x, tl.y); cx.lineTo(tx, ty - 2.2); cx.lineTo(tr.x, tr.y);
+        cx.quadraticCurveTo((b.x + tr.x) / 2 + sw * .4, (b.y + ty) / 2 - 1, b.x, b.y); cx.closePath();
+        cx.fillStyle = col; cx.fill(); cx.strokeStyle = EDGE; cx.lineWidth = 1.1; cx.lineJoin = 'round'; cx.stroke();
+      };
+      const a0 = loc(-3.6, -3.6), a1 = loc(-1.2, -3.1), b1 = loc(1.3, -2.7);
+      const tAx = a0.x + 1.2 + st.x * 1.2 - 3.0 + sw, tBx = a1.x + 1.3 + st.x * .8 - .2 - sw * .6, tBy = a1.y + Lt * .93;
+      if(!white){ cx.fillStyle = LINING; cx.beginPath(); cx.moveTo(a1.x, a1.y); cx.lineTo(tAx + 1.7, a0.y + Lt); cx.lineTo(tBx - 1.7, tBy); cx.closePath(); cx.fill(); }   // red lining between the tails
+      panel(a0, a1, tAx, a0.y + Lt, 1.7, white ? '#fff' : COAT_FAR);
+      panel(a1, b1, tBx, tBy, 1.7, white ? '#fff' : COAT);
     },
 
     front(cx, f, t, S, P){
@@ -519,26 +644,27 @@
       const hw = {N:{x:f.x + f.face * S.aN.hand.x, y:f.y + S.aN.hand.y}, F:{x:f.x + f.face * S.aF.hand.x, y:f.y + S.aF.hand.y}};
       f.handW = hw;
 
-      // bow tie + vest button + belt buckle
-      if(!white){
-        const sh = S.sh;
-        cx.fillStyle = '#ffd479'; cx.beginPath(); cx.moveTo(sh.x + 1, sh.y - 1); cx.lineTo(sh.x + 5, sh.y - 3.2); cx.lineTo(sh.x + 5, sh.y + 1.2); cx.closePath(); cx.fill();
-        cx.beginPath(); cx.moveTo(sh.x + 1, sh.y - 1); cx.lineTo(sh.x - 3, sh.y - 3.2); cx.lineTo(sh.x - 3, sh.y + 1.2); cx.closePath(); cx.fill();
-        cx.fillStyle = OUT; cx.beginPath(); cx.arc(sh.x + 1, sh.y - 1, 1.1, 0, 7); cx.fill();
-        cx.fillStyle = GOLD; cx.fillRect(S.pel.x - 2, S.pel.y - 1.5, 4, 3);
-      }
-      // top hat (drawn in the head's own tilted space)
+      // head: face + hair (drawn in the head's own tilted space)
       const h = S.head, ang = Math.atan2(h.x - S.sh.x, -(h.y - S.sh.y));
       cx.save(); cx.translate(h.x, h.y); cx.rotate(ang);
-      if(!white){
-        cx.fillStyle = OUT; cx.fillRect(-7.8, -7.2, 15.6, 3.2); cx.fillRect(-5.2, -16.4, 10.4, 10);
-        cx.fillStyle = '#241624'; cx.fillRect(-6.6, -6.7, 13.2, 2.2); cx.fillRect(-4.2, -15.6, 8.4, 9);
-        cx.fillStyle = '#c23b5b'; cx.fillRect(-4.2, -9.4, 8.4, 2.4);
-        cx.fillStyle = GOLD; cx.fillRect(-1.2, -9.7, 2.4, 3);
-        cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(4, -1.4, 1.3, 0, 7); cx.fill(); cx.fillStyle = '#1a0a14'; cx.beginPath(); cx.arc(4.4, -1.4, .7, 0, 7); cx.fill();   // eye
-        cx.strokeStyle = '#1a0a14'; cx.lineWidth = .8; cx.beginPath(); cx.arc(2.2, 1.9, 1.8, .2, Math.PI - .5); cx.stroke();                                           // smile
-      }
+      if(!white) face(cx, t);
+      hair(cx, white);
       cx.restore();
+
+      // near arm again, ON TOP of the face (so a raised arm covers the head correctly), with the embroidered cuff
+      const q = S.aN, ow = AW.ow;
+      Body.capsule(cx, q.s, q.el, AW.u + ow * 2, EDGE); Body.capsule(cx, q.s, q.el, AW.u, white ? '#fff' : COAT);
+      Body.capsule(cx, q.el, q.hand, AW.f + ow * 2, EDGE); Body.capsule(cx, q.el, q.hand, AW.f, white ? '#fff' : COAT);
+      if(!white){
+        cx.fillStyle = 'rgba(0,0,0,.4)'; cx.strokeStyle = 'rgba(0,0,0,.35)'; cx.lineWidth = 1; cx.beginPath(); cx.arc(q.el.x, q.el.y, AW.f * .3, 0, 7); cx.stroke();
+        cuff(cx, q, false);
+      }
+      cx.fillStyle = EDGE; cx.beginPath(); cx.arc(q.hand.x, q.hand.y, AW.hand + ow, 0, 7); cx.fill();
+      cx.fillStyle = white ? '#fff' : SKIN; cx.beginPath(); cx.arc(q.hand.x, q.hand.y, AW.hand, 0, 7); cx.fill();
+      if(!white){                                                                                      // far cuff, only when that sleeve is clear of the body and head
+        const fa = S.aF, ax = S.sh.x - S.pel.x, ay = S.sh.y - S.pel.y, tt = clamp(((fa.hand.x - S.pel.x) * ax + (fa.hand.y - S.pel.y) * ay) / (ax * ax + ay * ay), 0, 1);
+        if(Math.hypot(fa.hand.x - (S.pel.x + ax * tt), fa.hand.y - (S.pel.y + ay * tt)) > 6 && Math.hypot(fa.hand.x - h.x, fa.hand.y - h.y) > 9) cuff(cx, fa, true);
+      }
 
       // puppet + strings (world space). Not drawn on the select screen (no match running).
       if(typeof G !== 'undefined' && G && G.f && G.f.includes(f)){

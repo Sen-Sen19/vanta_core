@@ -8,7 +8,7 @@
 //   Step 2: RIGHT low strike  — far (right) hand again, ELBOW / waist height, 3 shards.
 //   Step 3: LEFT head strike  — near (left) hand, HEAD height, the big 10-shard volley.
 //
-// Skills: I = DIMENSIONAL IMPALE (mirror shard + portal), II = SHATTERED GRAVITY (pull zone), see `skills:` below.
+// Skills: I = DIMENSIONAL IMPALE (mirror shard + portal), II = SHATTERED GRAVITY (pull zone), ULTIMATE = SYSTEM OVERRIDE, see `skills:` / `ultimate:` below.
 //
 // Held-Key Attack: REALITY COLLAPSE (basic.fan below)
 //   CASTING TIME (castTime, seconds): the hold only becomes a REAL cast once the cast bar passes its tick mark. Let go before that = nothing is fired, only the normal combo hit comes out. So tapping / half-holding cannot be spammed for free shots.
@@ -47,5 +47,13 @@ Characters.skills('errata', {
     {name:'SHATTERED GRAVITY', kind:'shatteredgravity', aim:true, cd:16, cast:.5, range:340, radius:130, form:.35, duration:5, pull:130, pullAir:520, lift:34,
       desc:'Drag to aim. A gravitational distortion appears at the spot and, for 5 seconds, steadily pulls every enemy inside it toward its center. It does no damage and enemies can still move, so they can fight the pull and walk out of it.'}
   ],
-  ultimate: null
+  // ULTIMATE - SYSTEM OVERRIDE (Reality Manipulation / Battlefield Disruption): no aim, d.cast s of casting (rooted, a hit fizzles it: only failCd), then d.dur s of corrupted reality:
+  //   1. CONTROL CORRUPTION: every enemy's movement controls (left / right / jump / drop) and attack + skill inputs (ATK, I, II, III) are reassigned at random. The mapping stays fixed until it ends.
+  //   2. FALSE PLATFORMS: exactly `real` floating platforms are moved to other positions; every other position (the old spots + `extra` new ones) holds a fake that looks identical. Only Errata's team
+  //      can stand on a fake; an enemy falls through it and takes fallDmg x max HP when the fall ends (0 HP = a normal KO, a life). A survivor that fell out of the arena comes back on a real platform.
+  //      The real ones go home when it ends. The main island is never touched.
+  //   3. GLITCH DISPLACEMENT: every enemy teleports to a random real platform every glitchMin..glitchMax s, the gaps shrinking by up to glitchTighten (0.5 = half as long at the end).
+  //   4. SHATTERED REALITY: the background becomes a collapsing mirror dimension (art in arena.js, drawMirrorWorld). TUNE HERE: dur, cd, real, extra, fallDmg, glitchMin, glitchMax, glitchTighten.
+  ultimate: {name:'SYSTEM OVERRIDE', kind:'sysoverride', type:'Arena - Ultimate', aim:false, cd:60, failCd:25, cast:.9, dur:12, fade:.8, real:3, extra:3, fallDmg:.2, glitchMin:1.4, glitchMax:3.2, glitchTighten:.5,
+    desc:'Errata tears reality apart for 12 seconds. Every enemy\'s controls are scrambled at random (movement, attack and skills) until it ends. The floating platforms are swapped for look-alikes: only 3 are real and they are moved somewhere else; the rest are illusions that only Errata\'s team can stand on, and an enemy that lands on one falls through and takes fall damage (and respawns if it survives). Enemies also glitch to random spots, more and more often, while the background collapses into a shattered mirror dimension. A hit while she casts it cancels it.'}
 });

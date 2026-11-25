@@ -1,4 +1,5 @@
-// NOCTIS art - ninja. Lean, agile ragdoll with a crescent blood-sickle arm blade on each arm, a trailing scarf, ninja run, and a focus aura while charging.
+// NOCTIS art - Shadow Stalker. Lean, agile ragdoll in matte-black tactical cloth under an Assassin Cowl, a layered black + crimson two-tail scarf, a crescent blood-sickle arm blade on each arm, ninja run, and a focus aura while charging.
+// LOOK (redesign): cowl + mask + eyes = hood(), scarf = ribbon() / scarfWrap(), torso() / foot() / legGear() / nearArm() = clothing. Poses, grips, blades and ability effects are unchanged.
 // Same shared ragdoll as everyone: the poses below are TARGETS (the "animation"), body.js joints are springs (the "ragdoll").
 // Hooks used: body (sizes), pose() = idle / run / turn / landing, air() = jump / fall, hurt() = knockback, attack() + spring() = combo + focus,
 //             behind() = scarf, aura, hand trails, shadow-step streak, sickle blade on the far arm. front() = sickle blade on the near arm + focus meter.
@@ -145,10 +146,220 @@
     cx.strokeStyle = '#ffd9cf'; cx.lineWidth = 1; edge();
   };
 
+
+  // ---------- LOOK (drawing only: no poses, timings, hitboxes or gameplay) ----------
+  // Matte black + deep crimson. Charcoal / gunmetal for layered fabric and edge highlights. Violet / lavender stays for shadow energy (aura, hook chain, shadow clones).
+  // Everything here is drawn in the same drawing space as before (origin = feet, x = forward) from the shared ragdoll points S, so it follows every pose and animation.
+  const OUT = '#0b0f1c', BLK = '#16171c', BLK2 = '#1f2128', CHAR = '#282b34', GUN = '#3c424d', RIM = '#4b5260', CRIM = '#a3202e', CRIM_D = '#5e111c', CRIM_L = '#d6414b', EYE = '#dc7f8d';
+  const UA = 3.8, FA = 3.4, HANDR = 2.7, HEAD_R = 6;      // must match body:{} below (the near arm is re-drawn on top of the head, so it needs the same widths)
+  const HEX = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+  const mixHex = (a, b, k) => { const A = HEX(a), B = HEX(b); return 'rgb(' + A.map((v, i) => Math.round(v + (B[i] - v) * k)).join(',') + ')'; };
+  const mixP = (a, b, k) => ({x:a.x + (b.x - a.x) * k, y:a.y + (b.y - a.y) * k});
+  const W = (white, c) => white ? '#fff' : c;                                   // hit flash = everything white, like the default body
+  const poly = (cx, pts) => { cx.beginPath(); pts.forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.closePath(); };
+  const line = (cx, a, b, w, col) => { cx.strokeStyle = col; cx.lineWidth = w; cx.beginPath(); cx.moveTo(a[0], a[1]); cx.lineTo(b[0], b[1]); cx.stroke(); };
+  const path = (cx, pts, w, col) => { cx.strokeStyle = col; cx.lineWidth = w; cx.beginPath(); pts.forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke(); };
+
+  // --- ASSASSIN COWL, in head space (origin = head centre, x = forward, y = down, head radius 6). Angular hood with a brow lip, a shadowed eye slit, a fitted mask. ---
+  const SHELL = [[-6.6,6.4],[-8.1,1.2],[-7.7,-3.6],[-3.9,-7.5],[1.4,-8.3],[5.5,-6.4],[7.3,-3.2],[7.1,-2],[3.2,-2.5],[.3,-1.9],[-.3,1.8],[-.7,7.4]];     // hood (its front edge is the brow lip over the eyes)
+  const FACE  = [[.3,-1.9],[3.2,-2.5],[7.1,-2],[7.2,2.1],[.4,2.2]];                                                                                   // the only skin-side opening: a shadowed slit for the eyes
+  const MASK  = [[.4,2.2],[3,2],[5.4,1.9],[6.5,2],[7.2,3.1],[6.7,4],[6.3,4.8],[5,6],[2.4,6.6],[-.8,6.6],[-2.3,5],[-1.2,3]];                    // fitted tactical mask over nose + mouth
+  const EYE_C = [4.4, -.05];
+
+  // eyes: natural pale crimson, NO permanent glow. g (0..1) = crimson-violet glow during shadow abilities / supernatural actions (see eyeGlow)
+  const eyeGlow = (f, t) => {
+    const A = f.A || {}, age = t - (f.blinkT ?? -9); let g = 0;
+    if(f.atk > 0 && A.skill) g = 1;                                                    // Shadow Hook / Shadow Replication / Phantom Onslaught
+    if(f.shd || f.onsl) g = 1;                                                         // hook in flight / onslaught running
+    if(f.charging && f.chg > 0) g = Math.max(g, .5 + .5 * clamp(f.chg / (A.chargeMax || 1), 0, 1));    // focus: gathering shadow energy
+    if(age >= 0 && age < .4) g = Math.max(g, 1 - age / .4);                            // Shadow Step
+    const s = state(f), dt = clamp(t - (s.egT ?? t), 0, .05); s.egT = t;
+    s.eg = (s.eg || 0) + (g - (s.eg || 0)) * (1 - Math.exp(-dt * 14));                  // eases in / out so it flares instead of blinking
+    return s.eg < .01 ? 0 : s.eg;
+  };
+
+  function hood(cx, H, ang, white, g, t){
+    cx.save(); cx.translate(H.x, H.y); cx.rotate(ang); cx.lineJoin = 'round'; cx.lineCap = 'round';
+    // hood shell + shadowed face slit
+    poly(cx, SHELL); cx.strokeStyle = OUT; cx.lineWidth = 3; cx.stroke(); cx.fillStyle = W(white, BLK); cx.fill();
+    poly(cx, FACE); cx.fillStyle = W(white, '#050507'); cx.fill();
+    if(!white){
+      // structure: a seam down the crown, a lit top edge so the angular silhouette reads on the dark arena, back seam
+      path(cx, [[-3.5,-6.6],[1.3,-7.4],[5,-5.5]], .8, RIM);
+      path(cx, [[1.2,-7.2],[-.2,-3.6],[-.2,-1.6]], .7, 'rgba(75,82,96,.7)');
+      path(cx, [[-7.0,-2.6],[-6.5,3.2]], .6, 'rgba(75,82,96,.6)');
+      // eyes: dim sclera, pale crimson iris, small pupil. The brow lip shades the top of them.
+      cx.fillStyle = '#6e5760'; cx.beginPath(); cx.ellipse(EYE_C[0], EYE_C[1], 2.05, 1.1, 0, 0, 7); cx.fill();
+      cx.fillStyle = g > .05 ? mixHex(EYE, '#ff5f8a', g) : EYE; cx.beginPath(); cx.arc(EYE_C[0] + .35, EYE_C[1] + .05, 1.08, 0, 7); cx.fill();
+      cx.fillStyle = '#2a0a12'; cx.beginPath(); cx.arc(EYE_C[0] + .55, EYE_C[1] + .05, .4, 0, 7); cx.fill();
+      const sh = cx.createLinearGradient(0, -2.5, 0, -.3); sh.addColorStop(0, 'rgba(3,3,5,' + (.95 - .35 * g) + ')'); sh.addColorStop(1, 'rgba(3,3,5,0)');
+      cx.save(); poly(cx, FACE); cx.clip(); cx.fillStyle = sh; cx.fillRect(0, -3, 8, 3); cx.restore();
+      if(g > 0){      // crimson-violet glow
+        const R = 2.6 + 3.4 * g, gr = cx.createRadialGradient(EYE_C[0] + .3, EYE_C[1], .2, EYE_C[0] + .3, EYE_C[1], R);
+        gr.addColorStop(0, 'rgba(255,100,140,' + (.8 * g) + ')'); gr.addColorStop(.45, 'rgba(190,70,210,' + (.32 * g) + ')'); gr.addColorStop(1, 'rgba(140,90,255,0)');
+        cx.fillStyle = gr; cx.beginPath(); cx.arc(EYE_C[0] + .3, EYE_C[1], R, 0, 7); cx.fill();
+        cx.fillStyle = 'rgba(255,205,222,' + (.85 * g) + ')'; cx.beginPath(); cx.ellipse(EYE_C[0] + .4, EYE_C[1] + .05, 1.5, .62, 0, 0, 7); cx.fill();      // eye itself burns bright
+        cx.strokeStyle = 'rgba(190,120,255,' + (.55 * g) + ')'; cx.lineWidth = .7; cx.beginPath(); cx.moveTo(EYE_C[0] + 1.6, EYE_C[1]); cx.lineTo(EYE_C[0] + 1.6 + 2.2 * g, EYE_C[1] - .25); cx.stroke();   // short violet flare
+      }
+    }
+    // mask
+    poly(cx, MASK); cx.strokeStyle = OUT; cx.lineWidth = 2.6; cx.stroke(); cx.fillStyle = W(white, '#101115'); cx.fill();
+    if(!white){
+      path(cx, [[5.4,2.1],[7,3.1]], .7, RIM);                                        // nose ridge
+      path(cx, [[6.2,4.9],[3.4,5.3]], .55, 'rgba(75,82,96,.55)');                       // mouth seam
+      path(cx, [[.2,3.4],[1.6,6]], .55, 'rgba(75,82,96,.45)');                        // cheek seam
+      // crimson stitching: along the brow lip of the hood and along the top edge of the mask (selected edges only)
+      cx.setLineDash([1.1, 1.0]); cx.lineCap = 'butt';
+      cx.globalAlpha = .8;
+      path(cx, [[6.6,-3.4],[3.3,-3.8],[.6,-3.3],[.0,.2]], .55, '#8d1a28');
+      path(cx, [[1.2,3.1],[3,2.9],[4.8,2.8]], .5, '#8d1a28');
+      path(cx, [[-6.9,2.6],[-6.3,5.6]], .55, CRIM_D);
+      cx.globalAlpha = 1;
+      cx.setLineDash([]);
+    }
+    cx.restore();
+  }
+
+  // scarf wrapped round the neck (layered: crimson lining peeks out along the lower rim, matte black outer on top) + the knot the two tails hang from
+  const NECK_UP = 2.9;
+  function scarfWrap(cx, S, white){
+    const l = S.lean, ux = Math.sin(l), uy = -Math.cos(l);
+    cx.save(); cx.translate(S.sh.x + ux * NECK_UP, S.sh.y + uy * NECK_UP); cx.rotate(l); cx.lineJoin = 'round';        // local: x = forward, y = down the torso
+    cx.fillStyle = OUT; cx.beginPath(); cx.ellipse(-.3, .7, 5.9, 3, 0, 0, 7); cx.fill();
+    cx.fillStyle = W(white, CRIM); cx.beginPath(); cx.ellipse(-.3, .55, 5, 2.1, 0, 0, 7); cx.fill();                    // inner lining
+    cx.fillStyle = OUT; cx.beginPath(); cx.ellipse(-.5, -.35, 5.4, 2.4, 0, 0, 7); cx.fill();
+    cx.fillStyle = W(white, BLK); cx.beginPath(); cx.ellipse(-.5, -.35, 4.7, 1.75, 0, 0, 7); cx.fill();                  // outer fabric
+    if(!white){
+      cx.strokeStyle = RIM; cx.lineWidth = .7; cx.beginPath(); cx.ellipse(-.5, -.5, 4.1, 1.3, 0, 3.6, 5.6); cx.stroke();
+      cx.strokeStyle = 'rgba(0,0,0,.5)'; cx.lineWidth = .6; cx.beginPath(); cx.moveTo(-2.2, -1.2); cx.quadraticCurveTo(-1, .2, -2.4, 1.3); cx.stroke();   // fold
+    }
+    cx.fillStyle = OUT; cx.beginPath(); cx.arc(-4.5, .1, 2.6, 0, 7); cx.fill();                                           // knot at the back of the neck
+    cx.fillStyle = W(white, BLK2); cx.beginPath(); cx.arc(-4.5, .1, 1.7, 0, 7); cx.fill();
+    cx.restore();
+  }
+  const knotAt = S => { const l = S.lean, ux = Math.sin(l), uy = -Math.cos(l), fx = Math.cos(l), fy = Math.sin(l);
+    return {x:S.sh.x + ux * (NECK_UP - .1) - fx * 4.5, y:S.sh.y + uy * (NECK_UP - .1) - fy * 4.5}; };
+
+  // one scarf tail: a ribbon of cloth along `pts`. It twists as it flows: the matte-black outer fabric turns away and the deep crimson lining shows, then it turns back.
+  // hw = half width at the root; tw = [time speed, phase] of the twist. Colour + width are per segment, so the lining appears gradually, never as a hard flip.
+  function ribbon(cx, raw, hw, t, tw, white){
+    const M = 4, N = raw.length, pts = [], U = [];                        // Catmull-Rom smoothing: M points between every two control points, so the cloth curves instead of kinking
+    for(let i = 0; i < N - 1; i++){
+      const p0 = raw[Math.max(0, i - 1)], p1 = raw[i], p2 = raw[i + 1], p3 = raw[Math.min(N - 1, i + 2)];
+      for(let j = 0; j < M; j++){
+        const u = j / M, u2 = u * u, u3 = u2 * u;
+        pts.push({x:.5 * (2 * p1.x + (-p0.x + p2.x) * u + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * u3),
+                  y:.5 * (2 * p1.y + (-p0.y + p2.y) * u + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u3)});
+        U.push(i + u);
+      }
+    }
+    pts.push(raw[N - 1]); U.push(N - 1);
+    const n = pts.length, L = [], R = [], seg = [];
+    for(let i = 0; i < n; i++){
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, nx = -dy / d, ny = dx / d;
+      const c = Math.cos(t * tw[0] - U[i] * .6 + tw[1]);                             // 1 = outer fabric faces the camera, -1 = lining faces the camera
+      const taper = 1 - .5 * (U[i] / (N - 1)), w = hw * taper * (.74 + .26 * Math.abs(c));
+      let ex = 0, ey = 0; if(i === n - 1){ ex = dx / d * 1.3; ey = dy / d * 1.3; }     // slanted (cut) tip
+      L.push([pts[i].x + nx * w + ex, pts[i].y + ny * w + ey]); R.push([pts[i].x - nx * w - ex, pts[i].y - ny * w - ey]);
+      seg.push(clamp((.4 - c) / .7, 0, 1));                                           // 0 = black, 1 = crimson
+    }
+    cx.lineJoin = 'round';
+    cx.beginPath(); L.forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); for(let i = n - 1; i >= 0; i--) cx.lineTo(R[i][0], R[i][1]); cx.closePath();
+    cx.strokeStyle = OUT; cx.lineWidth = 2.4; cx.stroke(); cx.fillStyle = W(white, BLK); cx.fill();
+    if(white) return;
+    for(let i = 1; i < n; i++){
+      const k = (seg[i - 1] + seg[i]) / 2; cx.fillStyle = mixHex(BLK, CRIM, k);
+      cx.beginPath(); cx.moveTo(L[i - 1][0], L[i - 1][1]); cx.lineTo(L[i][0], L[i][1]); cx.lineTo(R[i][0], R[i][1]); cx.lineTo(R[i - 1][0], R[i - 1][1]); cx.closePath(); cx.fill(); cx.lineWidth = .5; cx.strokeStyle = cx.fillStyle; cx.stroke();
+    }
+    path(cx, L, .6, 'rgba(75,82,96,.55)');                                              // lit edge
+  }
+
+  // --- NEAR ARM re-drawn over the head (the cowl is drawn in front()), with the elbow reinforcement. Same widths as the default limb, so it is invisible except where it adds detail. ---
+  function nearArm(cx, S, P, white){
+    const A = S.aN, dx = A.hand.x - A.el.x, dy = A.hand.y - A.el.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, nx = uy, ny = -ux;
+    Body.capsule(cx, A.s, A.el, UA + 3.2, OUT); Body.capsule(cx, A.el, A.hand, FA + 3.2, OUT);
+    Body.capsule(cx, A.s, A.el, UA, W(white, P.limb)); Body.capsule(cx, A.el, A.hand, FA, W(white, P.limb));
+    if(!white){
+      Body.capsule(cx, {x:A.el.x - ux * 1.2, y:A.el.y - uy * 1.2}, {x:A.el.x + ux * 2.6, y:A.el.y + uy * 2.6}, FA + 1.8, OUT);     // reinforced elbow panel
+      Body.capsule(cx, {x:A.el.x - ux * 1.2, y:A.el.y - uy * 1.2}, {x:A.el.x + ux * 2.6, y:A.el.y + uy * 2.6}, FA + .8, CHAR);
+      const c = {x:A.el.x + ux * 3.6, y:A.el.y + uy * 3.6}; line(cx, [c.x - nx * 2.2, c.y - ny * 2.2], [c.x + nx * 2.2, c.y + ny * 2.2], .8, CRIM);   // crimson cuff piping
+    }
+    cx.fillStyle = OUT; cx.beginPath(); cx.arc(A.hand.x, A.hand.y, HANDR + 1.6, 0, 7); cx.fill();
+    cx.fillStyle = W(white, P.hand); cx.beginPath(); cx.arc(A.hand.x, A.hand.y, HANDR, 0, 7); cx.fill();
+  }
+
+  // --- LEGS: slim tactical trousers with a flexible knee panel, one thigh strap and one shin strap. leg = {hip, knee, ankle} ---
+  function legGear(cx, leg, white, far){
+    if(white) return;
+    const h = leg.hip, k = leg.knee, a = leg.ankle;
+    const tx = k.x - h.x, ty = k.y - h.y, tl = Math.hypot(tx, ty) || 1, nx = ty / tl, ny = -tx / tl;           // along the thigh, normal pointing forward
+    const sx = a.x - k.x, sy = a.y - k.y, sl = Math.hypot(sx, sy) || 1, snx = sy / sl, sny = -sx / sl;
+    cx.save(); cx.lineCap = 'round'; if(far) cx.globalAlpha = .85;
+    const m = mixP(h, k, .38);                                                                                 // thigh strap + tiny crimson tab
+    line(cx, [m.x - nx * 2.9, m.y - ny * 2.9], [m.x + nx * 2.9, m.y + ny * 2.9], 1.5, GUN);
+    line(cx, [m.x + nx * 1.5, m.y + ny * 1.5], [m.x + nx * 2.5, m.y + ny * 2.5], 1.3, far ? CRIM_D : CRIM);
+    const q = mixP(k, a, .5);                                                                                  // shin strap
+    line(cx, [q.x - snx * 2.4, q.y - sny * 2.4], [q.x + snx * 2.4, q.y + sny * 2.4], 1.1, GUN);
+    let bx = tx / tl + sx / sl, by = ty / tl + sy / sl; const bl = Math.hypot(bx, by) || 1; bx /= bl; by /= bl; const fx = by, fy = -bx;   // knee: along the bisector, front = perpendicular
+    const c = {x:k.x + fx * .6, y:k.y + fy * .6};
+    Body.capsule(cx, {x:c.x - bx * 1.7, y:c.y - by * 1.7}, {x:c.x + bx * 1.7, y:c.y + by * 1.7}, 5.8, OUT);
+    Body.capsule(cx, {x:c.x - bx * 1.7, y:c.y - by * 1.7}, {x:c.x + bx * 1.7, y:c.y + by * 1.7}, 4.6, CHAR);
+    line(cx, [c.x + fx * 1.6 - bx * 1.3, c.y + fy * 1.6 - by * 1.3], [c.x + fx * 1.6 + bx * 1.3, c.y + fy * 1.6 + by * 1.3], .7, RIM);
+    cx.restore();
+  }
+
   Characters.art('noctis', {
     // lean build: slimmer torso, limbs and head, average height (lengths stay default)
-    body: {head:{r:6}, torso:{w:9}, uArm:{w:3.8}, fArm:{w:3.4}, hand:{r:2.7}, thigh:{w:5}, shin:{w:4.2}, foot:{w:3.2}},
-    colors: {dark:'#14172b'},
+    body: {head:{r:6}, torso:{w:9}, uArm:{w:3.8}, fArm:{w:3.4}, hand:{r:2.7}, thigh:{w:5}, shin:{w:4.2}, foot:{w:3.2}, noRings:true, belt:3},
+    // matte black cloth, charcoal / gunmetal trousers, crimson only as trim (drawn in the hooks below)
+    colors: {shirt:'#16171c', limb:'#1f2128', far:'#101115', head:'#16171c', dark:'#0e0f12', hand:'#14151a', legs:'#23262e', legsFar:'#15171c'},
+
+    // matte-black tactical torso (replaces the plain capsule): lean taper, overlapped chest panel with crimson inner lining, layered waist sash. Torso space: a = up the spine, b = forward.
+    torso(cx, S, B, P, white){
+      legGear(cx, S.lF, white, true);                      // far leg: knee panel + straps (the far leg was just drawn)
+      const l = S.lean, ux = Math.sin(l), uy = -Math.cos(l), fx = Math.cos(l), fy = Math.sin(l);
+      const pt = (a, b) => [S.pel.x + ux * a + fx * b, S.pel.y + uy * a + fy * b];
+      const blob = a => {            // smooth closed shape through the points
+        const q = a.map(p => pt(p[0], p[1])), n = q.length, mid = (p, r) => [(p[0] + r[0]) / 2, (p[1] + r[1]) / 2], m0 = mid(q[n - 1], q[0]);
+        cx.beginPath(); cx.moveTo(m0[0], m0[1]);
+        for(let i = 0; i < n; i++){ const m = mid(q[i], q[(i + 1) % n]); cx.quadraticCurveTo(q[i][0], q[i][1], m[0], m[1]); }
+        cx.closePath();
+      };
+      const TORSO = [[-.5,-3.6],[3,-3.4],[7,-4.1],[10.5,-4.6],[12.8,-3.8],[14,-1],[14,2],[12.6,4.3],[9.5,4.9],[6.5,4.3],[3,3.7],[-.5,3.9]];
+      cx.lineJoin = 'round'; cx.lineCap = 'round';
+      blob(TORSO); cx.strokeStyle = B.outline; cx.lineWidth = B.outlineW * 2; cx.stroke(); cx.fillStyle = W(white, P.shirt); cx.fill();
+      if(white) return;
+      cx.save(); blob(TORSO); cx.clip();
+      // chest: the front panel overlaps like a wrap jacket; crimson lining shows along the overlap edge only
+      poly(cx, [pt(14.6,1.3), pt(14.6,6), pt(6.6,6), pt(7.4,3.8), pt(10.8,2.5)]); cx.fillStyle = BLK2; cx.fill();
+      path(cx, [pt(14,.8), pt(10.8,2.5), pt(7.4,3.8)], 1.1, CRIM);
+      path(cx, [pt(12.9,-3.6), pt(10.5,-4.2), pt(7,-3.7), pt(3,-3), pt(.5,-3.2)], .7, 'rgba(75,82,96,.65)');       // lit back edge (silhouette reads on the dark arena)
+      cx.restore();
+      // waist: charcoal sash wrapped twice. The second wrap crosses it diagonally and its fold shows the crimson lining.
+      poly(cx, [pt(1.9,-4.1), pt(5.1,-4), pt(5.3,4.7), pt(2.1,4.7)]); cx.fillStyle = CHAR; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = .8; cx.stroke();
+      poly(cx, [pt(1.1,-3.9), pt(2.9,-4), pt(5.4,4.4), pt(3.4,4.5)]); cx.fillStyle = BLK; cx.fill(); cx.stroke();
+      poly(cx, [pt(3.4,4.5), pt(5.4,4.4), pt(4.5,6)]); cx.fillStyle = CRIM; cx.fill(); cx.stroke();
+      path(cx, [pt(2.3,-4), pt(5,-3.9)], .6, 'rgba(75,82,96,.6)');
+    },
+
+    // lightweight shinobi-style boot (replaces the default foot, same footprint so the feet still touch the ground exactly): slim foot, wrapped shaft, reinforced sole, crimson cuff
+    foot(cx, leg, P, white, f, far){
+      const w = 3.2, len = 8, planted = leg.planted, phi = planted ? 0 : clamp(-leg.sa * .5, -.8, .8);      // same numbers as the default foot in body.js
+      const lift = planted ? clamp((leg.hip.x - leg.ankle.x - 2) * .12, 0, 3.5) : 0, col = white ? '#fff' : (far ? '#0d0e11' : '#14151a');
+      const a = {x:leg.ankle.x - 1.5, y:leg.ankle.y - lift}, b = {x:leg.ankle.x + (len - 1.5) * Math.cos(phi), y:leg.ankle.y + (len - 1.5) * Math.sin(phi)};
+      const top = mixP(leg.ankle, leg.knee, .34);
+      Body.capsule(cx, a, b, w + 3.2, OUT); Body.capsule(cx, a, top, 4.7 + 3.2, OUT);
+      Body.capsule(cx, a, b, w, col); Body.capsule(cx, a, top, 4.7, col);
+      if(white) return;
+      const ux = leg.knee.x - leg.ankle.x, uy = leg.knee.y - leg.ankle.y, ul = Math.hypot(ux, uy) || 1, nx = uy / ul, ny = -ux / ul;      // along the lower leg, normal pointing forward
+      cx.save(); cx.lineCap = 'round';
+      Body.capsule(cx, {x:a.x + .6, y:a.y + w * .38}, {x:b.x - .3, y:b.y + w * .38}, 1.2, '#06070a');             // reinforced sole
+      Body.capsule(cx, {x:b.x - 1.8, y:b.y - .2}, {x:b.x - .2, y:b.y - .1}, w * .72, far ? '#17181d' : '#1c1e25');  // toe cap
+      const q = mixP(leg.ankle, leg.knee, .16); line(cx, [q.x - nx * 2.3, q.y - ny * 2.3], [q.x + nx * 2.3, q.y + ny * 2.3], .8, far ? '#2b2e37' : GUN);                  // wrap strap
+      const c = mixP(leg.ankle, leg.knee, .3); line(cx, [c.x - nx * 2.5, c.y - ny * 2.5], [c.x + nx * 2.5, c.y + ny * 2.5], .9, far ? CRIM_D : CRIM);                      // crimson cuff
+      cx.restore();
+    },
+
 
     // grounded: ready stance with a toe-bounce, ninja run (low, leaning hard, blades trailing behind), quick turn lead, knee-bend landing
     pose(tg, f, t, run, K){
@@ -315,10 +526,12 @@
       const sh = {x:3, y:-41}, pel = {x:0, y:-26}, dv = (ang, L) => [Math.sin(ang) * L, Math.cos(ang) * L];
       if(c.slash){ cap(pel.x, pel.y, -3, -14, 5); cap(-3, -14, -9, -4, 4); cap(pel.x, pel.y, 5, -15, 5); cap(5, -15, 10, -6, 4); }      // legs tucked in the air
       else { cap(pel.x, pel.y, -2, -13, 5); cap(-2, -13, -4, 0, 4); cap(pel.x, pel.y, 3, -13, 5); cap(3, -13, 1, 0, 4); }
-      cx.strokeStyle = 'rgba(92,107,255,.8)'; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(1, -44); cx.quadraticCurveTo(-12, -42 + Math.sin(t * 9 + sd) * 4, -20, -36 + Math.sin(t * 7 + sd) * 5); cx.stroke();   // scarf
+      cx.strokeStyle = 'rgba(92,107,255,.8)'; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(1, -44); cx.quadraticCurveTo(-12, -42 + Math.sin(t * 9 + sd) * 4, -20, -36 + Math.sin(t * 7 + sd) * 5); cx.stroke();   // scarf (two tails)
+      cx.lineWidth = 2.4; cx.beginPath(); cx.moveTo(1, -43); cx.quadraticCurveTo(-9, -37 + Math.sin(t * 8 + sd + 1.1) * 4, -15, -28 + Math.sin(t * 6 + sd + 1.1) * 5); cx.stroke();
       cap(pel.x, pel.y, sh.x, sh.y, 9);
-      cx.fillStyle = '#0d1022'; cx.strokeStyle = '#8f95ff'; cx.lineWidth = 1.2; cx.beginPath(); cx.arc(4, -48, 6, 0, 7); cx.fill(); cx.stroke();
-      cx.strokeStyle = '#e4e7ff'; cx.lineWidth = 1.4; cx.beginPath(); cx.moveTo(5, -49); cx.lineTo(9, -50); cx.stroke();   // eye
+      cx.save(); cx.translate(4, -48); cx.fillStyle = '#0d1022'; cx.strokeStyle = '#8f95ff'; cx.lineWidth = 1.2; cx.lineJoin = 'round';      // hooded head: same cowl silhouette as the real thing
+      cx.beginPath(); cx.arc(0, 0, 6, 0, 7); cx.fill(); cx.stroke(); poly(cx, SHELL); cx.fill(); cx.stroke(); cx.restore();
+      cx.strokeStyle = '#ff9fb8'; cx.lineWidth = 1.3; cx.beginPath(); cx.moveTo(7.6, -47.8); cx.lineTo(10.2, -47.8); cx.stroke();   // eye slit
       const blade = (hx, hy, ang) => { cx.save(); cx.translate(hx, hy); cx.rotate(ang); cx.fillStyle = '#9b1c27'; cx.strokeStyle = '#0b0f1c'; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(0, -2); cx.quadraticCurveTo(15, -14, 22, 3); cx.quadraticCurveTo(12, -4, 0, 3); cx.closePath(); cx.fill(); cx.stroke(); cx.restore(); };
       const e = (c.k || 0) * (c.k || 0) * (3 - 2 * (c.k || 0));
       const arm = (ang, el, flip) => { const [ex, ey] = dv(ang, 10), [hx, hy] = dv(ang + el, 10); cap(sh.x, sh.y, sh.x + ex, sh.y + ey, 3.6); cap(sh.x + ex, sh.y + ey, sh.x + ex + hx, sh.y + ey + hy, 3.2); blade(sh.x + ex + hx, sh.y + ey + hy, ang + el - 1.45); return [sh.x + ex + hx, sh.y + ey + hy]; };
@@ -334,14 +547,16 @@
       const A = f.A || {}, atk = f.atk > 0, v = clamp(Math.abs(f.vx) / 200, 0, 1), drag = clamp(-f.vx * f.face * .02, -6, 6);
       cx.lineCap = 'round'; cx.lineJoin = 'round';
 
-      // scarf: two tails from the neck; hangs and sways when still, streams straight back when running
-      [[0, '#e0455f', 3.2], [1.1, '#b82e48', 2.4]].forEach(([ph, col, w]) => {
-        cx.strokeStyle = col; cx.lineWidth = w; cx.beginPath(); cx.moveTo(S.sh.x - 1.5, S.sh.y - 1.5);
-        for(let i = 1; i <= 5; i++){
+      // scarf: two layered tails (matte-black outer, deep crimson lining) hanging from the knot at the back of the neck; hangs and sways when still, streams straight back when running.
+      // Same sway / drag motion as before; the cloth also twists a little so the crimson lining shows as it moves.
+      const kn = knotAt(S), white = f.flash > 0;
+      [[0, 2.3, 6, [1.5 + 2.4 * v, 0]], [1.1, 1.9, 5, [1.9 + 2.4 * v, 2.3]]].forEach(([ph, hw, n, tw]) => {
+        const pts = [{x:kn.x, y:kn.y}];
+        for(let i = 1; i <= n; i++){
           const sway = Math.sin(t * (4 + 6 * v) - i * .9 + ph) * (.8 + 2.2 * v) * (i * .45);
-          cx.lineTo(S.sh.x - 1.5 - i * (1.8 + 4.6 * v) + drag * i * .25, S.sh.y - 1.5 + i * (3.4 * (1 - v) + .8) + sway);
+          pts.push({x:kn.x - i * (1.8 + 4.6 * v) + drag * i * .25, y:kn.y + i * (3.4 * (1 - v) + .8) + sway});
         }
-        cx.stroke();
+        ribbon(cx, pts, hw, t, tw, white);
       });
 
       // hand trails (bright streaks while a blade is swinging)
@@ -384,7 +599,11 @@
 
     // drawn ON TOP: sickle blade on the near arm + focus meter above the head
     front(cx, f, t, S, P){
-      const s = state(f), grip = s.grip || GRIP_READY, grow = .55 + .45 * clamp((t - (s.gripT ?? -9)) / .1, 0, 1);
+      const s = state(f), grip = s.grip || GRIP_READY, grow = .55 + .45 * clamp((t - (s.gripT ?? -9)) / .1, 0, 1), white = f.flash > 0;
+      legGear(cx, S.lN, white, false);                                                           // near leg: knee panel + straps
+      hood(cx, S.head, S.lean + ((f.rig && f.rig.j.head.a) || 0), white, eyeGlow(f, t), t);       // Assassin Cowl over the default head
+      scarfWrap(cx, S, white);                                                                   // scarf round the neck (the tails hang from its knot, see behind())
+      nearArm(cx, S, P, white);                                                                  // near arm back on top of the head / legs, with the elbow panel
       sickle(cx, S.aN, grip, grow);
       xSlash(cx, f, S);
       if(!f.charging || !(f.chg > 0)) return;

@@ -18,6 +18,7 @@ const charById = id => Characters.get(id);
 
 function show(id){
   if(id !== 'game') stopGame();
+  if(id === 'menu' && typeof Net !== 'undefined') Net.leave();   // back at the main menu = drop any online room
   document.body.classList.toggle('ingame', id === 'game');
   $$('.screen').forEach(s => s.classList.toggle('active', s.id === id));
   if(id === 'select') render();
@@ -220,7 +221,7 @@ $('#fsBtn').onclick = () => { askNotifPermission(); toggleFullscreen(); };
 document.addEventListener('pointerdown', e => { if(!e.target.closest('#fsBtn')){ askNotifPermission(); enterFullscreen(); } }, {once:true});
 
 // ---- VERSION LABEL (bump this each time you push, so you can tell the new code loaded) ----
-const APP_VERSION = 'v1.4 notif';
+const APP_VERSION = 'v1.5 online';   // online play refuses to connect two different versions
 (function(){
   const host = document.querySelector('#menu .menu');
   if(!host) return;

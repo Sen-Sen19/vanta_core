@@ -19,7 +19,7 @@
       <h1><span>VANTA</span> CORE</h1>
       <p class="sub">ARENA FIGHTER</p>
       <button class="go" data-go="mode">&#9654; PLAY</button>
-      <button id="btnMulti" class="locked" disabled aria-disabled="true">&#128274; MULTIPLAYER <small>COMING SOON</small></button>
+      <button id="btnMulti" class="locked" disabled aria-disabled="true">&#128274; MULTIPLAYER <small>COMING SOON</small></button>   <!-- net.js turns this into ONLINE 1 v 1 -->
       <button id="btnHow">HOW TO PLAY</button>
     </div>
   </section>
@@ -33,6 +33,26 @@
       <button class="go" data-size="2">2 v 2</button>
       <button class="go" data-size="3">3 v 3</button>
       <button class="back" data-go="menu">&lt; BACK</button>
+    </div>
+  </section>
+
+  <!-- ONLINE 1v1 lobby (net.js) -->
+  <section class="screen" id="online">
+    <div class="menu wide">
+      <h1><span>ONLINE</span> 1 v 1</h1>
+      <p class="sub" id="olStatus">create a room or join one with a code</p>
+      <div id="olStart" class="olcol">
+        <button class="go" id="olHost">HOST A ROOM</button>
+        <div class="oljoin"><input id="olJoinCode" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="olJoinBtn">JOIN</button></div>
+        <button class="back" id="olBack">&lt; BACK</button>
+      </div>
+      <div id="olRoom" class="olcol hide">
+        <div class="olcode" id="olCode"></div>
+        <div class="olpicks"><span>YOU: <b id="olMe">-</b></span><span>OPPONENT: <b id="olOpp">-</b></span></div>
+        <div class="grid" id="olGrid"></div>
+        <button class="go" id="olGo" disabled>READY</button>
+        <button class="back" id="olLeave">&lt; LEAVE ROOM</button>
+      </div>
     </div>
   </section>
 
@@ -133,5 +153,7 @@
 <script src="controller.js?v=202611211300"></script>
 <script src="body.js?v=202611211300"></script>
 <script src="arena.js?v=202611211300"></script>
+<script src="lib/peerjs.min.js?v=1.5.4"></script>   <!-- PeerJS 1.5.4 (WebRTC), kept local so it also loads offline -->
+<script src="net.js?v=202611271000"></script>
 </body>
 </html>

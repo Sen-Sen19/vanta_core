@@ -42,7 +42,7 @@ function mkF(c, idx, team = idx ? 1 : 0){   // idx = index in G.f (unique), team
     uc:0, pn:0, pt:0, bar:0, mag:0, rl:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0, snipe:null, snCd:0, snLock:false, lob:null, mo:0, moT:0, mbT:0, ns:null, ge:null, fc:null, fl:null, rec:0, fs:0, fsRdy:false, fsKey:0, fsGain:0, frz:0, rootT:0, lowG:0, ice:null, skeletons:[], descent:null, damnedDone:false,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
     team, dead:false, tgt:null, cs:0, comboT:0, aqB:0, w:30, h:52, x:0, y:0, vx:0, vy:0, face: team ? -1 : 1, hp:c.hp, max:c.hp, stocks:3,
     jumps:2, gr:false, atk:0, atkCd:0, hitDone:true, stun:0, inv:0, drop:0, flash:0,
-    jq:false, dq:false, aq:false, in:{l:0, r:0}, aiT:0};
+    jq:false, dq:false, aq:false, in:{l:0, r:0}, aiT:0, pl:idx === 0};   // pl = a human steers it (you, or the remote player online)
 }
 const SLOT_X = [130, 190, 70];   // spawn distance from the center for the 1st / 2nd / 3rd fighter of a team
 function place(f){ const s = G.f.filter(q => q.team === f.team && q.idx < f.idx).length; f.x = W/2 + (f.team ? 1 : -1) * SLOT_X[s] * (W / 880); f.tslot = s; f.y = G.P[0].y; f.vx = f.vy = 0; f.gr = true; f.jumps = 2; }
@@ -62,7 +62,7 @@ function foeOf(f){
 }
 function startMatch(cfg){
   setWorld(cfg.size || 1);
-  G = {cfg, mode:cfg.mode, P:makeMap(cfg.size || 1), t:0, paused:false, last:performance.now(), over:null, parts:[], pops:[], rings:[], waves:[], slaughterFx:[], puddles:[], iceZ:[], errZ:[], sov:null, cuts:[], shake:0,
+  G = {cfg, mode:cfg.mode, P:cfg.P || makeMap(cfg.size || 1), t:0, me:cfg.me || 0, net:cfg.net || null, paused:false, last:performance.now(), over:null, parts:[], pops:[], rings:[], waves:[], slaughterFx:[], puddles:[], iceZ:[], errZ:[], sov:null, cuts:[], shake:0,
        stars:Array.from({length:50}, () => ({x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.6+.4}))};
   const n = cfg.size || 1, mates = cfg.allies || [], foes = cfg.foes || [];
   G.f = [mkF(cfg.player, 0, 0)];
@@ -70,9 +70,14 @@ function startMatch(cfg){
   G.f.push(mkF(cfg.enemy, G.f.length, 1));
   for(let i = 0; i < n - 1; i++) G.f.push(mkF(foes[i], G.f.length, 1));
   G.f.forEach(place);
+  if(G.net){ G.f.forEach(f => f.pl = true); if(G.net === 'host') G.f[1].remote = true; }   // online 1v1: both are human; on the host the guest's fighter is driven by the network, not by think()
   Ctl.reset(); Ctl.on = true;
-  Ctl.skAim = [0, 1, 2].map(i => !!(slotDef(G.f[0], i) || {}).aim);   // which of my skill buttons are drag-to-aim
+  Ctl.skAim = [0, 1, 2].map(i => !!(slotDef(G.f[G.me], i) || {}).aim);   // which of my skill buttons are drag-to-aim
   $('#endBox').classList.add('hide'); $('#pauseWrap').classList.add('hide'); closeInfo(true);
+  $('#restartBtn').classList.toggle('hide', !!G.net); $('#pSelBtn').classList.toggle('hide', !!G.net);   // no restart / fighter swap mid-match online
+  $('#pauseWrap h2').textContent = G.net ? 'MENU' : 'PAUSED'; $('#pauseBtn').innerHTML = G.net ? '&#10005; MENU' : '&#10074;&#10074; PAUSE';
+  $('#againBtn').disabled = G.net === 'guest'; $('#againBtn').textContent = G.net === 'guest' ? 'WAITING FOR HOST...' : 'REMATCH';
+  if(G.net === 'host') Net.hostStart(G); else if(G.net === 'guest') Net.guestStart(G);
   show('game'); fit();
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
@@ -203,15 +208,14 @@ function ko(f){
     if(q.sc && q.sc.target === f) q.sc.target = null;
     if(q.uhand && q.uhand.target === f) endHand(q);
   });
-  if(G.mode === 'ai'){
+  if(G.mode === 'ai' || G.mode === 'pvp'){
     f.stocks--;
     if(f.stocks <= 0){
       f.dead = true;                                                       // out of the match (the reset below clears everything, then it is parked off-screen)
       const alive = G.f.filter(q => !q.dead), t0 = alive.some(q => q.team === 0), t1 = alive.some(q => q.team === 1);
       if(!(t0 && t1)){                                                     // a whole team is out = match over
         G.over = alive[0] || f;
-        $('#endT').textContent = !t0 && !t1 ? 'DRAW' : t0 ? 'YOU WIN' : 'YOU LOSE';
-        $('#endBox').classList.remove('hide');
+        showEnd();
       }
     }
   }
@@ -219,6 +223,11 @@ function ko(f){
   if(f.dead){ f.x = -5000; f.y = -5000; f.hp = 0; f.inv = 999; f.stun = 0; }   // eliminated: parked off-screen, skipped by everything
 }
 
+function showEnd(){   // match over (G.over is set): "YOU WIN / YOU LOSE" from the point of view of whoever is looking (host or guest)
+  const alive = G.f.filter(q => !q.dead), win = alive.length ? alive[0].team : -1, me = G.f[G.me];
+  $('#endT').textContent = win < 0 ? 'DRAW' : win === me.team ? 'YOU WIN' : 'YOU LOSE';
+  $('#endBox').classList.remove('hide');
+}
 function endCharge(f, o){   // ATK let go (or knocked / jumped): turn the held time into a stronger punch
   const A = f.A, L = A.cl || 0;
   f.charging = false; f.chgDone = true;
@@ -340,7 +349,7 @@ function unleashA(A, L){
 function fanAim(f, o){
   const i = f.in, hx = f.x + f.face * 18, hy = f.y - 34;
   let ax = f.face, ay = 0;
-  if(f.idx === 0){ const v = i.aim; if(v){ ax = v.x; ay = v.y; } else ay = (i.ay || 0) * .6; }
+  if(f.pl){ const v = i.aim; if(v){ ax = v.x; ay = v.y; } else ay = (i.ay || 0) * .6; }
   else if(o){ ax = o.x - hx; ay = (o.y - o.h / 2) - hy; }
   const m = Math.hypot(ax, ay) || 1; ax /= m; ay /= m;
   if(Math.abs(ax) > .3) f.face = ax > 0 ? 1 : -1;
@@ -2126,7 +2135,7 @@ function sniperStep(f, dt){
     S.t += dt; S.kn = Math.min(1, S.t / d.kneel); S.k = Math.min(1, S.t / (d.kneel + d.aim)); f.atk = .5; f.atkCd = Math.max(f.atkCd, .2); f.aqB = 0; f.vx = 0;                       // f.atk is only a "pose is on" flag: art.js poses him from f.snipe
     if(S.ph === 'recover'){ S.rt += dt / d.recover; if(S.rt >= 1) sniperEnd(f, 0); return; }
     const o = f.cur;
-    if(f.idx === 0){                                                                                    // YOU: joystick / ATK drag aim directly, keys tilt and turn
+    if(f.pl){                                                                                    // A HUMAN (you / the online opponent): joystick / ATK drag aim directly, keys tilt and turn
       const v = i.aim;
       if(v){
         if(Math.abs(v.x) > .35) f.face = Math.sign(v.x);
@@ -2465,7 +2474,7 @@ function drawSovFx(){   // (world space) a small glitch mark over every corrupte
   });
 }
 function drawSovHud(){   // (screen space) when YOU are the one with scrambled controls: glitch scan bars + a warning
-  const Z = G.sov, a = G.f[0]; if(!Z || !a || !a.scr || Z.ph !== 'on') return;
+  const Z = G.sov, a = G.f[G.me]; if(!Z || !a || !a.scr || Z.ph !== 'on') return;
   const w = view.w, h = view.h, T = G.t;
   cx.save();
   for(let i = 0; i < 4; i++){ const y = ((T * (.6 + i * .17) + i * .29) % 1) * h; cx.fillStyle = i % 2 ? 'rgba(255,60,210,.10)' : 'rgba(0,240,255,.10)'; cx.fillRect(0, y, w, 2 + (i % 3) * 3); }
@@ -3098,11 +3107,18 @@ function update(dt){
     a.in.aim = Ctl.atkV || (Math.hypot(Ctl.sx, Ctl.sy) > .4 ? {x:Ctl.sx, y:Ctl.sy} : null); a.in.ay = Ctl.dn - Ctl.up;   // aiming a held attack (Deadeye Sniper): drag ATK or the stick, or W / S
     [0, 1, 2].forEach(i => { if(Ctl.sk[i]){ a.skq = {i, ...Ctl.sk[i]}; Ctl.sk[i] = null; } });   // skill casts from the buttons / keys 1 2 3
   }else{ Ctl.jump = Ctl.drop = Ctl.atk = false; [0, 1, 2].forEach(i => Ctl.sk[i] = null); }    // you are out: your allies keep fighting
+  const R = G.f.find(f => f.remote);                                                             // online: the guest's inputs come off the network
+  if(R){ const p = Net.take(); if(!R.dead){ R.in.l = p.l; R.in.r = p.r; R.in.held = p.held; R.in.aim = p.aim; R.in.ay = p.ay; if(p.jq) R.jq = true; if(p.dq) R.dq = true; if(p.aq) R.aq = true; if(p.skq) R.skq = p.skq; } }
   const live = G.f.filter(f => !f.dead);
   live.forEach(f => { f.cur = foeOf(f); });                                                      // everyone picks the enemy they are fighting
-  live.forEach(f => { if(f.idx !== 0 && f.cur && (G.mode === 'ai' || f.team === 0)) think(f, f.cur, dt); });   // bots: every fighter but you (sparring: only your allies, the dummies stand still)
+  live.forEach(f => { if(f.idx !== 0 && !f.remote && f.cur && (G.mode === 'ai' || f.team === 0)) think(f, f.cur, dt); });   // bots: every fighter but you (sparring: only your allies, the dummies stand still)
   live.forEach(f => { if(f.cur){ const sv = f.scr ? scrApply(f) : null; stepF(f, f.cur, dt); if(sv) scrRestore(f, sv); } });   // scr = System Override: scrambled controls
   stepPuddles(dt); stepVerdicts(dt); stepHands(dt); stepSkeletons(dt); stepIceZones(dt); stepErrZones(dt); stepSysOv(dt);
+  stepFx(dt);
+  updateShots(dt);
+  G.shake = Math.max(0, G.shake - dt);
+}
+function stepFx(dt){   // purely visual things (particles, damage numbers, rings...). The online guest runs this too, between host snapshots.
   G.parts.forEach(q => { q.life -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 900 * dt; });
   G.parts = G.parts.filter(q => q.life > 0);
   G.pops.forEach(q => { q.life -= dt; q.y -= 70 * dt; }); G.pops = G.pops.filter(q => q.life > 0);
@@ -3111,8 +3127,6 @@ function update(dt){
   if(G.bolts){ G.bolts.forEach(q => q.life -= dt); G.bolts = G.bolts.filter(q => q.life > 0); }
   G.cuts.forEach(q => q.life -= dt); G.cuts = G.cuts.filter(q => q.life > 0);
   G.slaughterFx.forEach(q => q.age += dt); G.slaughterFx = G.slaughterFx.filter(q => q.age < q.life);
-  updateShots(dt);
-  G.shake = Math.max(0, G.shake - dt);
 }
 
 function rr(x, y, w, h, r){ cx.beginPath(); if(cx.roundRect) cx.roundRect(x, y, w, h, r); else cx.rect(x, y, w, h); }
@@ -3283,7 +3297,7 @@ function drawF(f){
     const a0 = f.face > 0 ? -1 : Math.PI - 1;
     cx.arc(x, y - f.h/2, 42 * f.A.reach / 58, a0, a0 + 2); cx.stroke();
   }
-  cx.fillStyle = f.idx === 0 ? '#4fc3f7' : f.team === 0 ? '#5be37d' : '#ff7a45';   // you = blue, your allies = green, enemies = orange
+  cx.fillStyle = f.idx === G.me ? '#4fc3f7' : f.team === 0 ? '#5be37d' : '#ff7a45';   // you = blue, your allies = green, enemies = orange
   cx.beginPath(); cx.moveTo(x - 6, y - f.h - 14); cx.lineTo(x + 6, y - f.h - 14); cx.lineTo(x, y - f.h - 6); cx.fill();
   if(f.K.passive && f.K.passive.kind === 'hunger'){   // ABYSSAL HUNGER: Shadow Fragments as violet pips over his head; READY = all lit + a pulsing aura and ring
     const mx = f.K.passive.max, rdy = f.fr >= mx, pu = .5 + .5 * Math.sin(G.t * 9);
@@ -3450,13 +3464,13 @@ function draw(){
   G.f.forEach(f => { const a = Characters.artOf(f.c.id); if(a.fxBack){ cx.save(); a.fxBack(cx, f, G.t, G); cx.restore(); } });   // per-hero effects under the bodies (rifts, afterimages, the back of the giant hand)
   G.f.forEach(f => { if(!f.dead) drawF(f); });
   if((G.cfg.size || 1) > 1) G.f.forEach(f => {   // team match: allies (green) and enemies (red) show their health above their head; only YOUR bar is in the corner
-  if(f.idx === 0 || f.dead) return;
+  if(f.idx === G.me || f.dead) return;
   const bw = 46, bx = f.x - bw / 2, by = f.y - f.h - 30, r = Math.max(0, Math.min(1, f.fc ? f.fc.hp / f.fc.max : f.hp / f.max));
   cx.save(); if(f.inv > 0 && Math.floor(G.t * 20) % 2) cx.globalAlpha = .6;
   cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillRect(bx - 1, by - 1, bw + 2, 7);
   cx.fillStyle = f.team === 0 ? '#4cd97b' : '#ff4d5e'; cx.fillRect(bx, by, bw * r, 5);
   if(f.bar > 0){ cx.fillStyle = '#7fd0ff'; cx.fillRect(bx, by + 5, bw * Math.min(1, f.bar / f.max), 2); }   // barrier
-  if(G.mode === 'ai'){ cx.fillStyle = '#fff'; for(let i = 0; i < f.stocks; i++){ cx.beginPath(); cx.arc(f.x - (f.stocks - 1) * 3.5 + i * 7, by - 5, 2, 0, 7); cx.fill(); } }   // stocks left
+  if(G.mode !== 'sparring'){ cx.fillStyle = '#fff'; for(let i = 0; i < f.stocks; i++){ cx.beginPath(); cx.arc(f.x - (f.stocks - 1) * 3.5 + i * 7, by - 5, 2, 0, 7); cx.fill(); } }   // stocks left
   cx.restore();
 });
 
@@ -3522,7 +3536,7 @@ function draw(){
     const h = f.hk || (f.shd && (f.shd.ph === 0 || f.shd.ph === 1 || f.shd.ph === 5) ? f.shd : null); if(!h) return; const ha = Characters.artOf(f.c.id).hook;
     cx.save(); if(ha) ha(cx, h, G.t); else { cx.strokeStyle = '#aab0b7'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(h.ox, h.oy); cx.lineTo(h.x, h.y); cx.stroke(); cx.beginPath(); cx.arc(h.x, h.y, 6, 0, 7); cx.fillStyle = '#ddd'; cx.fill(); } cx.restore();
   });
-  const am = Ctl.aim, af = G.f[0], ad = am && slotDef(af, am.i);
+  const am = Ctl.aim, af = G.f[G.me], ad = am && slotDef(af, am.i);
   if(ad && ad.kind === 'replicate' && !am.cancel){   // Shadow Replication: summon = no aim line; teleport = ring on the shadow the aim picks
     if(af.shadows.length){
       const ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0; let bi = 0, bs = -9;
@@ -3586,7 +3600,7 @@ function draw(){
     cx.beginPath(); cx.arc(q.x, q.y, q.r * k, 0, 7); cx.stroke(); cx.globalAlpha = (1 - k) * .16; cx.fillStyle = q.fill || '#ff8a2a'; cx.fill(); });   // Total Extinction shockwave
   cx.globalAlpha = 1;
   G.parts.forEach(q => { if(q.v) return; cx.globalAlpha = Math.max(0, q.life * 2.5); cx.fillStyle = q.col; cx.fillRect(q.x, q.y, 5, 5); });   // (vomit sludge q.v is drawn earlier, under the fighters)
-  G.rings.forEach(q => { const k = 1 - q.life / .25; cx.globalAlpha = 1 - k; cx.strokeStyle = '#fff'; cx.lineWidth = 1 + 4 * (1 - k); cx.beginPath(); cx.arc(q.x, q.y, 10 + k * 34, 0, 7); cx.stroke(); });
+  G.rings.forEach(q => { const k = Math.max(0, 1 - q.life / .25); cx.globalAlpha = 1 - k; cx.strokeStyle = '#fff'; cx.lineWidth = 1 + 4 * (1 - k); cx.beginPath(); cx.arc(q.x, q.y, 10 + k * 34, 0, 7); cx.stroke(); });
   cx.textAlign = 'center'; cx.lineWidth = 4; cx.strokeStyle = '#000';
   G.pops.forEach(q => {   // damage numbers: pop big, shrink, float up, fade
     cx.globalAlpha = Math.min(1, q.life * 3); cx.font = '900 ' + Math.round(26 - 8 * Math.min(1, (.8 - q.life) / .12)) + 'px system-ui';
@@ -3600,8 +3614,8 @@ const big = (G.cfg.size || 1) > 1;
 G.f.forEach(f => {
   const i = f.team === 1, w = big ? Math.min(210, view.w * .27) : Math.min(260, view.w * .34), x = i ? view.w - w - 12 : 12, y = 56 + (big ? (f.tslot || 0) * 38 : 0);
    
-   if(big && f.idx !== 0) return;
-   const tag = big ? (f.idx === 0 ? 'YOU ' : f.team === 0 ? 'ALLY ' : 'FOE ') : (i ? 'P2 ' : 'P1 ');
+   if(big && f.idx !== G.me) return;
+   const tag = big ? (f.idx === G.me ? 'YOU ' : f.team === 0 ? 'ALLY ' : 'FOE ') : (i ? 'P2 ' : 'P1 ') + (G.net && f.idx === G.me ? '(YOU) ' : '');
     cx.save(); if(f.dead) cx.globalAlpha = .35;
     cx.textAlign = i ? 'right' : 'left'; cx.fillStyle = '#fff'; cx.font = '700 ' + (big ? 12 : 13) + 'px system-ui';
     cx.fillText(tag + f.c.name, i ? x + w : x, y - 8);
@@ -3616,17 +3630,17 @@ G.f.forEach(f => {
     cx.fillRect(i ? x + w * (1 - r) : x, y, w * r, 10);
     if(f.bar > 0){ const br = Math.min(1, f.bar / f.max); cx.fillStyle = '#7fd0ff'; cx.fillRect(i ? x + w * (1 - br) : x, y + 10, w * br, 3); }   // barrier = thin blue line under the bar
     cx.fillStyle = '#fff'; cx.font = (big ? 11 : 13) + 'px system-ui';
-    cx.fillText(f.dead ? 'OUT' : G.mode === 'ai' ? '\u25CF'.repeat(Math.max(0, f.stocks)) : '\u221E', i ? x + w : x, y + (big ? 22 : 28));
+    cx.fillText(f.dead ? 'OUT' : G.mode !== 'sparring' ? '\u25CF'.repeat(Math.max(0, f.stocks)) : '\u221E', i ? x + w : x, y + (big ? 22 : 28));
     cx.restore();
   });
   cx.textAlign = 'center'; cx.fillStyle = 'rgba(255,255,255,.6)'; cx.font = '12px system-ui';
-  cx.fillText((big ? G.cfg.size + 'v' + G.cfg.size + '  -  ' : '') + (G.mode === 'ai' ? 'AI ' + G.cfg.difficulty.toUpperCase() : 'SPARRING (no win/loss)'), view.w / 2, 22);
+  cx.fillText((big ? G.cfg.size + 'v' + G.cfg.size + '  -  ' : '') + (G.mode === 'pvp' ? Net.label() : G.mode === 'ai' ? 'AI ' + G.cfg.difficulty.toUpperCase() : 'SPARRING (no win/loss)'), view.w / 2, G.net ? 54 : 22);   // (online: the wider MENU button sits at the top)
 }
 
 // skill buttons: a dark clockwise sweep (--cd = fraction of the cooldown left) shows the recharge, .cd = nothing ready (big seconds in the middle),
 // data-n = charges ready (corner, only for multi-charge skills), .none = this hero has no skill in that slot, .rdy = flash when it becomes ready again
 function syncBtns(){
-  const f = G.f[0];
+  const f = G.f[G.me];
   [0, 1, 2].forEach(i => {
     const b = skBtns[i], d = slotDef(f, i);
     let n = '', cd = false, frac = 0;
@@ -3650,7 +3664,12 @@ function loop(t){
   raf = requestAnimationFrame(loop);
   const dt = Math.min(.033, (t - G.last) / 1000 || 0); G.last = t;
   try{
-    if(!G.paused){ if(G.hs > 0) G.hs -= dt; else { G.t += dt; if(!G.over) update(dt); } }   // G.hs = hit-stop (short freeze on heavy hits)
+    if(G.net === 'guest') Net.guestFrame(dt);                      // online guest: no simulation, just inputs out + host snapshots in
+    else{
+      if(!G.paused){ if(G.hs > 0) G.hs -= dt; else { G.t += dt; if(!G.over) update(dt); } }   // G.hs = hit-stop (short freeze on heavy hits)
+      if(G.net === 'host') Net.hostTick(dt);
+    }
+    if(G.over && $('#endBox').classList.contains('hide')) showEnd();   // (the guest learns the match is over from a snapshot)
     syncBtns(); draw();
   }catch(err){   // a bug shows its message on the canvas (and in the console) instead of a silent black screen
     console.error(err); cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height);
@@ -3658,13 +3677,14 @@ function loop(t){
   }
 }
 
-$('#againBtn').onclick = () => G && startMatch(G.cfg);
-$('#selBtn').onclick = () => show('select');
+$('#againBtn').onclick = () => G && G.net !== 'guest' && startMatch(G.cfg);
+$('#selBtn').onclick = () => G && G.net ? Net.lobby() : show('select');
 addEventListener('resize', () => { if(G) fit(); });
 
 // pause
 function setPause(p){
   if(!G || G.over) return;
+  if(G.net){ $('#pauseWrap').classList.toggle('hide', !p); Ctl.reset(); return; }   // online: the match cannot be frozen, the menu only offers QUIT
   G.paused = p; G.last = performance.now();
   $('#pauseWrap').classList.toggle('hide', !p);
   Ctl.reset(); Ctl.on = !p;
@@ -3676,7 +3696,7 @@ addEventListener('keydown', e => {
   if(!G || e.repeat) return;
   const k = e.key.toLowerCase();
   if(k === 'i' && !G.over){ toggleInfo(); return; }
-  if(k === 'escape' || k === 'p'){ if(!$('#infoWrap').classList.contains('hide')){ closeInfo(); return; } setPause(!G.paused); }
+  if(k === 'escape' || k === 'p'){ if(!$('#infoWrap').classList.contains('hide')){ closeInfo(); return; } setPause(G.net ? $('#pauseWrap').classList.contains('hide') : !G.paused); }
 });
 
 // ---- SKILL INFO: the (i) button above the ultimate opens a side panel (overlay, not a modal). The match is frozen while it is open and continues when you close it.
@@ -3684,7 +3704,7 @@ addEventListener('keydown', e => {
 const KIND_TYPE = {dimimpale:'Ground target - Mirror + Teleport', shatteredgravity:'Ground target - Pull zone', grandentrance:'Ground target - Stomp', nostrings:'Aimed - piercing line', wintergrasp:'Ground target - Launch + Frost', crystalcoffin:'Ground target - Immobilize', iceage:'Arena - Ultimate', shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', sniper:'Held key - aimed shot', lobshot:'Arc projectile - area blast', slaughterhouse:'Grab - Ultimate', marks:'Passive', lightningstep:'Transform - Invulnerable dash', skyfall:'Ground target - Lightning strikes', stormofruin:'Arena - Ultimate', sysoverride:'Arena - Ultimate', roller:'Held key - paint trail', colorsweep:'Area - 360 sweep', paintquake:'Ground target - Hop + slam', masterpiece:'Area - Ultimate', ritual:'Held key - Fear aura', gravebound:'Ground wave - crawling hands', recoilescape:'Aerial repositioning - rear burst', bulletrain:'Ground target - Area denial', damned:'Summon - 3 Skeleton Warriors', fallendescent:'Sky Dive - Dark Shockwave'};
 const dmgNum = (f, o, m) => Math.round((10 + f.c.hp / 40) * 2.2 * (1 - armOf(o) / 50) * m);
 function infoRows(){
-  const f = G.f[0], o = foeOf(f), K = f.K, rows = [], B = K.basic;
+  const f = G.f[G.me], o = foeOf(f), K = f.K, rows = [], B = K.basic;
   const cdTxt = d => d.charges > 1 ? d.charges + ' charges, ' + d.recharge + 's each' : d.cd != null ? d.cd + 's' : '-';
   const dmgTxt = d => d.kind === 'finalcurtain' ? d.combo.map(c => c.fixed).join(' / ') + ' (beast, ' + d.combo.reduce((a, c) => a + c.fixed, 0) + ' total)' : d.kind === 'damned' ? '~' + dmgNum(f, o, .5) + ' / ~' + dmgNum(f, o, .7) + ' / ~' + dmgNum(f, o, 1.3) + ' (3 skeletons)' : d.kind === 'abysshand' ? '~' + dmgNum(f, o, d.ticks * d.tickDmg + d.crushDmg + d.slamDmg) + ' total' : d.kind === 'shadowstep' ? '-' : d.kind === 'skyfall' || d.kind === 'stormofruin' ? '~' + dmgNum(f, o, d.dmg) + ' / strike' : d.kind === 'lightningstep' ? '~' + dmgNum(f, o, d.dmg) + ' / hit' : d.tickDmg ? '~' + dmgNum(f, o, Math.floor((d.frenzy || 1.5) / (d.tick || .09)) * d.tickDmg + d.finishDmg) + ' total' : d.hits ? '~' + dmgNum(f, o, d.hits.reduce((a, h) => a + h.dmg, 0)) + ' total' : d.dps ? '~' + Math.round(o.max * d.dps) + '/s' : d.dmg ? '~' + dmgNum(f, o, d.dmg) : '-';
   rows.push({tag:'ATK', name:'Basic attack', type:B.combo ? B.combo.length + '-hit combo' : 'Basic attack', cd:'-', dmg:B.combo ? '~' + B.combo.map(c => dmgNum(f, o, c.dmg ?? B.dmg)).join(' / ') : '~' + dmgNum(f, o, B.dmg), desc:B.desc});
@@ -3699,7 +3719,7 @@ function infoRows(){
 function openInfo(){
   if(!G || G.over) return;
   const list = $('#infoList'), mk = (t, c, x) => { const e = document.createElement(t); if(c) e.className = c; if(x != null) e.textContent = x; return e; };
-  $('#infoName').textContent = G.f[0].c.name; list.textContent = '';
+  $('#infoName').textContent = G.f[G.me].c.name; list.textContent = '';
   infoRows().forEach(r => {
     const k = mk('div', 'ik'), top = mk('div', 'top'), st = mk('div', 'st2'), cd = mk('div'), dm = mk('div');
     top.append(mk('span', 'tag', r.tag), mk('span', 'nm2', r.name));
@@ -3708,7 +3728,7 @@ function openInfo(){
     list.append(k);
   });
   list.scrollTop = 0;
-  if(!G.paused){ G.paused = true; G.infoPaused = true; G.last = performance.now(); Ctl.reset(); Ctl.on = false; }
+  if(!G.paused && !G.net){ G.paused = true; G.infoPaused = true; G.last = performance.now(); Ctl.reset(); Ctl.on = false; }
   $('#infoWrap').classList.remove('hide');
 }
 function closeInfo(silent){

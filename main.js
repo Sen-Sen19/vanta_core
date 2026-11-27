@@ -158,13 +158,60 @@ function toggleFullscreen(){
     try{ fsExit.call(document); }catch(e){}
   }else enterFullscreen();
 }
-function syncFsBtn(){ $('#fsBtn').innerHTML = isFs() ? '&#10005; EXIT FS' : '&#9974; FULLSCREEN'; }
+
+let toastEl = null, toastTimer = 0;
+function showToast(msg){
+  if(!toastEl){
+    toastEl = document.createElement('div');
+    toastEl.id = 'toast';
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent = msg;
+  toastEl.classList.remove('show');
+  void toastEl.offsetWidth;                 // restart the animation if one is already showing
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+let swReg = null;
+function registerSW(){
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(()=>{});
+}
+registerSW();
+function askNotifPermission(){            // must run from a tap, browsers block it otherwise
+  try{ if('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); }catch(e){}
+}
+async function sysNotify(title, body){
+  try{
+    if(!('Notification' in window)){ showToast('Notifications not supported here'); return; }
+    if(!window.isSecureContext){ showToast('Notifications need https'); return; }
+    if(Notification.permission === 'default'){ try{ await Notification.requestPermission(); }catch(e){} }
+    if(Notification.permission !== 'granted'){ showToast('Notifications blocked - allow them in site settings'); return; }
+    if('serviceWorker' in navigator){
+      const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, rej) => setTimeout(rej, 4000))]);
+      await reg.showNotification(title, {body, tag:'vanta-fs'});
+    }else new Notification(title, {body, tag:'vanta-fs'});
+  }catch(e){ showToast('Notification failed: ' + (e && e.message ? e.message : 'service worker not ready')); }
+}
+let wasFs = false;
+function syncFsBtn(){
+  const now = isFs();
+  $('#fsBtn').innerHTML = now ? '&#10005; EXIT FS' : '&#9974; FULLSCREEN';
+  if(now !== wasFs){
+    const msg = now ? 'Fullscreen on' : 'Fullscreen off';
+    showToast(msg);
+    sysNotify('VANTA CORE', msg);
+    wasFs = now;
+  }
+}
 document.addEventListener('fullscreenchange', syncFsBtn);
 document.addEventListener('webkitfullscreenchange', syncFsBtn);
 if(!fsReq) $('#fsBtn').classList.add('hide');   // e.g. iPhone Safari has no fullscreen API
-$('#fsBtn').onclick = toggleFullscreen;
+$('#fsBtn').onclick = () => { askNotifPermission(); toggleFullscreen(); };
 // also try once on the first tap anywhere (skipped if the tap is on the fullscreen button)
-document.addEventListener('pointerdown', e => { if(!e.target.closest('#fsBtn')) enterFullscreen(); }, {once:true});
+document.addEventListener('pointerdown', e => { if(!e.target.closest('#fsBtn')){ askNotifPermission(); enterFullscreen(); } }, {once:true});
 
 // ---- HARD REFRESH ----
 async function hardRefresh(){

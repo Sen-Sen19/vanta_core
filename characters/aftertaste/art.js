@@ -33,7 +33,8 @@
   // ---------- secondary motion: belly + apron flap are little springs that lag behind the body ----------
   // ox = belly forward/back offset (px), oy = belly up/down offset (px). Positive oy = sags down.
   const stOf = f => f.atS || (f.atS = {ox: 0, oy: 0, vx: 0, vy: 0, fo: 0, fv: 0, t: null, pvx: 0, pvy: 0, plean: 0, gr: true, airVy: 0, step: 0,
-                                       landT: -9, dip: 0, patk: 0, pflash: 0, pt: null, sm: null, dtw: 0, wc: null, cal: null, cside: 1, cwrap: 0, ha: null});
+                                       landT: -9, dip: 0, patk: 0, pflash: 0, pt: null, sm: null, dtw: 0, wc: null, cal: null, cside: 1, cwrap: 0, ha: null,
+                                       cleavImpact: -1});
 
   function simBelly(f, t, S){
     const s = stOf(f);
@@ -64,8 +65,12 @@
     if(f.flash > s.pflash + .04){ s.vy += 55; s.vx -= 70; }    // getting hit: whole belly shudders
     s.pflash = f.flash;
 
-    s.vx += (-170 * s.ox - 7 * s.vx) * dt;  s.ox = clamp(s.ox + s.vx * dt, -8, 8);
-    s.vy += (-150 * s.oy - 6 * s.vy) * dt;  s.oy = clamp(s.oy + s.vy * dt, -6, 9);
+    // Wheezing / breathing belly: slow sine at rest target
+    const breath = Math.sin(t * 2.2);
+    const targetOx = breath * 0.45;
+    const targetOy = (breath + 1) * 0.4;
+    s.vx += (-170 * (s.ox - targetOx) - 7 * s.vx) * dt;  s.ox = clamp(s.ox + s.vx * dt, -8, 8);
+    s.vy += (-150 * (s.oy - targetOy) - 6 * s.vy) * dt;  s.oy = clamp(s.oy + s.vy * dt, -6, 9);
     s.fv += (-90 * s.fo - 5 * s.fv) * dt;   s.fo = clamp(s.fo + s.fv * dt, -9, 9);
     return s;
   }
@@ -160,10 +165,13 @@
   const atkP = f => f.atk > 0 ? clamp(1 - f.atk / ((f.A && f.A.time) || .75), 0, 1) : 0;
   const CLEAVER_REST = .25;       // wrist at rest: blade points forward-down and its tip rests on the floor = the last frame of the smash
   const CLEAVER_WRIST = [[0, CLEAVER_REST], [.3, .1], [.45, .7], [.55, .75], [.64, .1], [.7, -.45], [.86, -.3], [1, CLEAVER_REST]];
+  const SLAUGHTER_WR = [[0, CLEAVER_REST], [.075, -.25], [.13, .9], [.23, .15], [.29, -.55], [.35, .85], [.41, -.45], [.475, .65], [.54, .2], [.62, -.35], [.72, .25], [.82, .1], [.91, -.2], [1, CLEAVER_REST]];
+  const CLEAVER_FLOOR_PTS = [[34, -5], [34, 14], [12.5, 14], [12.5, -5], [13, 0]];
+  const HOOK_FLOOR_TH = Array.from({length: 9}, (_, k) => Math.PI * 1.12 * k / 8);
+
   function drawCleaver(cx, S, f, s, white){
     const hh = S.aF.hand;
-    const slaughterWr = [[0, CLEAVER_REST], [.075, -.25], [.13, .9], [.23, .15], [.29, -.55], [.35, .85], [.41, -.45], [.475, .65], [.54, .2], [.62, -.35], [.72, .25], [.82, .1], [.91, -.2], [1, CLEAVER_REST]];
-    const wTarget = Body.keys(atkP(f), f.A && f.A.skill === 'slaughterhouse' ? slaughterWr : stepOf(f).wr);
+    const wTarget = Body.keys(atkP(f), f.A && f.A.skill === 'slaughterhouse' ? SLAUGHTER_WR : stepOf(f).wr);
     s.wc = s.wc == null ? wTarget : s.wc + (wTarget - s.wc) * (1 - Math.exp(-s.dtw * 16));      // eased, so the snap is quick but never teleports
     const frame = al => { const ux = Math.sin(al), uy = Math.cos(al); return (a, b) => ({x: hh.x + ux * a - uy * b, y: hh.y + uy * a + ux * b}); };   // b > 0 = the EDGE side, which leads the swing
     let al = f.rig.j.aF.a + f.rig.j.eF.a + s.wc;
@@ -173,7 +181,12 @@
       if(sn > .5) s.cside = 1; else if(sn < -.5) s.cside = -1;                                 // tip direction has hysteresis: it only flips when the blade is clearly on the other side
       for(let i = 0; i < 40; i++){
         const Q = frame(al);
-        if(Math.max(...[[34, -5], [34, 14], [12.5, 14], [12.5, -5], [13, 0]].map(([a, b]) => Q(a, b).y)) <= -1) break;
+        let maxLow = -999;
+        for(let j = 0; j < CLEAVER_FLOOR_PTS.length; j++){
+          const ptY = Q(CLEAVER_FLOOR_PTS[j][0], CLEAVER_FLOOR_PTS[j][1]).y;
+          if(ptY > maxLow) maxLow = ptY;
+        }
+        if(maxLow <= -1) break;
         al += s.cside * .05; clamped = true;
       }
       if(clamped && was !== s.cside) s.cwrap += was;            // side change while touching the floor: the blade goes up and OVER (windup: up behind him, recovery: up and back to the rear), never through the floor
@@ -213,7 +226,7 @@
     const hookFrame = al => { const ax = Math.sin(al), ay = Math.cos(al), nx = -ay, ny = ax; return (a, b) => ({x: h.x + ax * a + nx * b, y: h.y + ay * a + ny * b}); };   // n = the side the hook curls to: always the same side of the shaft, so it never flips
     if(f.gr) for(let i = 0; i < 40; i++){                                                       // slams stop AT the floor: if the hook would go into the ground, lift it (the head ends up planted on the floor)
       const Q = hookFrame(al); let low = -99;
-      for(let k = 0; k <= 8; k++){ const th = Math.PI * 1.12 * k / 8; low = Math.max(low, Q(25 + 9.5 * Math.sin(th), 9.5 * (1 - Math.cos(th))).y + 3.5); }
+      for(let k = 0; k < HOOK_FLOOR_TH.length; k++){ const th = HOOK_FLOOR_TH[k]; const py = Q(25 + 9.5 * Math.sin(th), 9.5 * (1 - Math.cos(th))).y + 3.5; if(py > low) low = py; }
       if(low <= 0) break;
       al += Math.sign(Math.sin(al) || 1) * .05;
     }
@@ -249,6 +262,181 @@
       const m = pts[8]; splat(cx, P(m[0], m[1]), 2.2, 1.7, 0); const t = pts[13]; splat(cx, P(t[0], t[1]), 1.6, 1.3, 0);
     }
     fist(cx, arm.hand, P_, white);
+  }
+
+  // ---- attack readability: weapon smears, fling droplets, and cleaver impact ----
+  function drawAttackSmear(cx, S, f, t, white){
+    if(white || !(f.atk > 0) || (f.A && f.A.skill)) return;
+    const ap = atkP(f);
+    const step = (f.A && f.A.step) || 0;
+    const st = STEPS[step] || STEPS[0];
+    const snap = st.snap;
+    if(ap < snap[0] - 0.05 || ap > snap[1] + 0.12) return;
+
+    // k: progress across the snap window 0..1
+    const k = clamp((ap - snap[0]) / (snap[1] - snap[0]), 0, 1);
+    const fade = ap > snap[1] ? clamp(1 - (ap - snap[1]) / 0.12, 0, 1) : clamp((ap - (snap[0] - 0.05)) / 0.05, 0, 1);
+    if(fade <= 0) return;
+
+    cx.save();
+    cx.lineCap = 'round'; cx.lineJoin = 'round';
+
+    // Steps 0 & 3: Hook attacks (step 0 = bash, step 3 = slam)
+    // Steps 1 & 2: Cleaver attacks (step 1 = overhead chop, step 2 = scoop)
+    if(step === 0){
+      // Hook bash: horizontal curved streak
+      const h = S.aN.hand;
+      const r = 28 * SZ;
+      const startA = -0.7 - (1 - k) * 0.8;
+      const endA = startA + 0.95 * (0.4 + 0.6 * k);
+      cx.beginPath(); cx.arc(h.x + 8, h.y, r, startA, endA);
+      cx.strokeStyle = `rgba(235,240,245,${0.35 * fade})`; cx.lineWidth = 3.8; cx.stroke();
+      cx.beginPath(); cx.arc(h.x + 8, h.y, r - 1.2, startA + 0.1, endA);
+      cx.strokeStyle = `rgba(180,20,28,${0.6 * fade})`; cx.lineWidth = 2.0; cx.stroke();
+
+      // Blood droplets flung outward
+      for(let i = 0; i < 3; i++){
+        const da = endA - 0.15 * i + (i * 0.1);
+        const dr = r + 4 + i * 5 * k;
+        const dx = h.x + 8 + Math.cos(da) * dr, dy = h.y + Math.sin(da) * dr;
+        cx.fillStyle = `rgba(150,14,22,${0.85 * fade})`;
+        cx.beginPath(); cx.arc(dx, dy, 1.4 - i * 0.25, 0, Math.PI * 2); cx.fill();
+      }
+    } else if(step === 1){
+      // Cleaver chop: steep overhead downward curve
+      const hh = S.aF.hand;
+      const r = 32 * SZ;
+      const startA = -1.9 + k * 0.3;
+      const endA = startA + 1.25 * (0.4 + 0.6 * k);
+      cx.beginPath(); cx.arc(hh.x + 10, hh.y + 6, r, startA, endA);
+      cx.strokeStyle = `rgba(235,240,245,${0.4 * fade})`; cx.lineWidth = 4.2; cx.stroke();
+      cx.beginPath(); cx.arc(hh.x + 10, hh.y + 6, r - 1.4, startA + 0.1, endA);
+      cx.strokeStyle = `rgba(180,20,28,${0.65 * fade})`; cx.lineWidth = 2.2; cx.stroke();
+
+      // Blood flung off blade tip
+      for(let i = 0; i < 4; i++){
+        const da = endA - 0.12 * i;
+        const dr = r + 4 + i * 4 * k;
+        const dx = hh.x + 10 + Math.cos(da) * dr, dy = hh.y + 6 + Math.sin(da) * dr;
+        cx.fillStyle = `rgba(150,14,22,${0.85 * fade})`;
+        cx.beginPath(); cx.arc(dx, dy, 1.5 - i * 0.2, 0, Math.PI * 2); cx.fill();
+      }
+    } else if(step === 2){
+      // Cleaver scoop: rising arc out of the ground
+      const hh = S.aF.hand;
+      const r = 30 * SZ;
+      const startA = 1.3 - k * 0.2;
+      const endA = startA - 1.2 * (0.4 + 0.6 * k);
+      cx.beginPath(); cx.arc(hh.x + 12, hh.y + 4, r, startA, endA, true);
+      cx.strokeStyle = `rgba(235,240,245,${0.38 * fade})`; cx.lineWidth = 4.0; cx.stroke();
+      cx.beginPath(); cx.arc(hh.x + 12, hh.y + 4, r - 1.3, startA - 0.1, endA, true);
+      cx.strokeStyle = `rgba(180,20,28,${0.6 * fade})`; cx.lineWidth = 2.0; cx.stroke();
+
+      // Blood droplets flung upward
+      for(let i = 0; i < 3; i++){
+        const da = endA + 0.12 * i;
+        const dr = r + 3 + i * 5 * k;
+        const dx = hh.x + 12 + Math.cos(da) * dr, dy = hh.y + 4 + Math.sin(da) * dr;
+        cx.fillStyle = `rgba(150,14,22,${0.85 * fade})`;
+        cx.beginPath(); cx.arc(dx, dy, 1.4 - i * 0.25, 0, Math.PI * 2); cx.fill();
+      }
+    } else if(step === 3){
+      // Hook slam: high overhead downward smash
+      const h = S.aN.hand;
+      const r = 34 * SZ;
+      const startA = -2.1 + k * 0.25;
+      const endA = startA + 1.45 * (0.4 + 0.6 * k);
+      cx.beginPath(); cx.arc(h.x + 12, h.y + 8, r, startA, endA);
+      cx.strokeStyle = `rgba(235,240,245,${0.45 * fade})`; cx.lineWidth = 4.8; cx.stroke();
+      cx.beginPath(); cx.arc(h.x + 12, h.y + 8, r - 1.5, startA + 0.1, endA);
+      cx.strokeStyle = `rgba(190,18,26,${0.75 * fade})`; cx.lineWidth = 2.4; cx.stroke();
+
+      // Heavy blood spray
+      for(let i = 0; i < 4; i++){
+        const da = endA - 0.14 * i;
+        const dr = r + 5 + i * 5 * k;
+        const dx = h.x + 12 + Math.cos(da) * dr, dy = h.y + 8 + Math.sin(da) * dr;
+        cx.fillStyle = `rgba(150,14,22,${0.9 * fade})`;
+        cx.beginPath(); cx.arc(dx, dy, 1.6 - i * 0.25, 0, Math.PI * 2); cx.fill();
+      }
+    }
+    cx.restore();
+  }
+
+  // Cleaver ground impact (steps 1 & 2): dust and blood puff at blade tip when it meets the floor
+  function checkCleaverImpact(f, s){
+    const A = f.A || {};
+    if(!(f.atk > 0) || A.skill) return;
+    const step = A.step || 0;
+    if(step !== 1 && step !== 2) return;
+    const ap = atkP(f);
+    // Impact triggers once as attack hits the snap floor threshold
+    const triggerP = step === 1 ? 0.66 : 0.44;
+    if(ap >= triggerP && s.cleavImpact !== step){
+      s.cleavImpact = step;
+      if(typeof G !== 'undefined' && G && G.parts){
+        const tipX = f.x + f.face * (step === 1 ? 36 : 28);
+        const tipY = f.y;
+        // Blood and dust puff
+        for(let i = 0; i < 7; i++){
+          const col = i % 2 === 0 ? '#8a1820' : (i % 3 === 0 ? '#b8303a' : '#8c7b64');
+          G.parts.push({
+            x: tipX + (Math.random() - 0.5) * 8,
+            y: tipY - 2 - Math.random() * 4,
+            vx: (Math.random() - 0.3) * f.face * 180 + (Math.random() - 0.5) * 80,
+            vy: -40 - Math.random() * 110,
+            life: 0.35 + Math.random() * 0.15,
+            col: col
+          });
+        }
+      }
+    } else if(ap < triggerP - 0.1){
+      s.cleavImpact = -1;
+    }
+  }
+
+  // Bloody boot prints & Flies
+  function drawAtmosphere(cx, f, t, run, white){
+    if(white) return;
+    cx.save();
+    // 1. Bloody boot prints: faint red stamps trailing on the ground while walking/running
+    if(f.gr && run > 0.08){
+      const ph = (f.rig && f.rig.phase) || 0;
+      const alpha = clamp(run * 0.45, 0, 0.4);
+      cx.fillStyle = `rgba(130, 20, 24, ${alpha})`;
+      for(let i = 0; i < 4; i++){
+        const lag = (i + 1) * 7.5;
+        const bob = Math.sin(ph - i * 1.3);
+        const side = bob > 0 ? 3.5 : -3.5;
+        const px = -lag * (f.vx * f.face >= 0 ? 1 : -1);
+        const py = 0;
+        cx.beginPath();
+        cx.ellipse(px, py + side * 0.25, 3.8, 1.4, 0, 0, Math.PI * 2);
+        cx.fill();
+        // smaller heel mark
+        cx.beginPath();
+        cx.ellipse(px - 3.2, py + side * 0.25, 2.0, 1.1, 0, 0, Math.PI * 2);
+        cx.fill();
+      }
+    }
+
+    // 2. Flies: 3 tiny erratic dots circling his head and bloody weapons at idle
+    const flyCount = 3;
+    for(let i = 0; i < flyCount; i++){
+      const speed = 4.2 + i * 1.5;
+      const baseA = t * speed + i * (Math.PI * 2 / flyCount);
+      // Erratic wobble
+      const wobbleR = 14 + Math.sin(t * 11 + i * 3) * 5;
+      const fx = Math.cos(baseA) * wobbleR + Math.sin(t * 7 + i) * 3;
+      const fy = -42 + Math.sin(baseA * 1.4) * (wobbleR * 0.55) + Math.cos(t * 9 + i * 2) * 4;
+
+      cx.fillStyle = '#1a1410';
+      cx.beginPath(); cx.arc(fx, fy, 0.85, 0, Math.PI * 2); cx.fill();
+      // tiny translucent wing flicker
+      cx.fillStyle = 'rgba(210, 220, 230, 0.5)';
+      cx.beginPath(); cx.ellipse(fx + 0.4, fy - 0.7, 0.9, 0.5, Math.sin(t * 40 + i), 0, Math.PI * 2); cx.fill();
+    }
+    cx.restore();
   }
 
   // ---------- 4-HIT COMBO: 1 HOOK bash (side swing)  2 CLEAVER chop (overhead)  3 CLEAVER scoop (rising cut out of the floor)  4 HOOK slam (overhead finisher) ----------
@@ -332,41 +520,8 @@
         cx.strokeStyle = '#3a2c1e'; cx.lineWidth = .55; cx.setLineDash([1.1, .9]); cx.stroke(); cx.setLineDash([]);
       };
 
-      // APRON FLAP + WAIST ROPE. Drawn BEHIND the belly, so the belly hangs freely over them. The rope runs under the belly and is tied in a knot
-      // under its front; the flap hangs from it down over his upper thighs (frayed, uneven hem).
-      const sw = s.fo * .9;     // flap swing
-      const fl = [pt(-4.6, 7.8, .85), pt(-5.8, 12.6, .9), pt(-9.6, 14 + sw, 0), pt(-11, 11.6 + sw * .8, 0), pt(-9.8, 9.2 + sw * .7, 0), pt(-11.2, 6.8 + sw * .5, 0), pt(-10, 4.6 + sw * .3, 0), pt(-5.4, 3.4, .3)];
-      const flapPath = () => { cx.beginPath(); cx.moveTo(fl[0].x, fl[0].y); for(let i = 1; i < fl.length; i++) cx.lineTo(fl[i].x, fl[i].y); cx.closePath(); };
-      flapPath(); cx.fillStyle = cloth; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke();
-      if(!white){
-        cx.save(); flapPath(); cx.clip();
-        cx.fillStyle = blood;
-        [[-6.8, 6, 1.7, 1.1, .3], [-8.2, 10.8, 2.1, 1.2, -.4], [-7.4, 12.8, 1, .9, 0]].forEach(([a, b, rx, ry, rot]) => { const p = pt(a, b + sw * .02, 0); cx.beginPath(); cx.ellipse(p.x, p.y, rx * 1.3, ry * 1.3, rot, 0, 7); cx.fill(); });
-        patch(-6.4, 4.6, -8.8, 7.6, '#8d7b5c', .3);           // mismatched repair patches
-        patch(-7.2, 10.6, -9.4, 13.4, '#b3a384', -.25);
-        cx.fillStyle = blood; const dh = fl[3]; cx.fillRect(dh.x - 3, dh.y - 3.5, 1.3, 3.5);   // drip running down from the hem
-        cx.restore();
-        // frayed, uneven hem: loose threads
-        cx.strokeStyle = clothD; cx.lineWidth = .6; cx.lineCap = 'round';
-        for(let i = 2; i < 6; i++){ const p = fl[i], q = fl[i + 1];
-          for(let k = 0; k < 4; k++){ const u = k / 4, x = p.x + (q.x - p.x) * u, y = p.y + (q.y - p.y) * u, L = .8 + ((i * 7 + k * 5) % 5) * .35;
-            cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x - ux * L + (k % 2 ? .5 : -.4), y - uy * L); cx.stroke(); } }
-      }
-      // waist rope (twisted) + knot with two loose tails, all under the belly
-      const rp = [pt(-4.4, -6, 0), pt(-6.2, 0, .1), pt(-6.8, 4, .3), pt(-6.7, 8.6, .7), pt(-5.2, 12.8, 1), pt(-3.8, 15.4, 1)];
-      const ropeLine = (col, w, dash) => {
-        cx.beginPath(); cx.moveTo(rp[0].x, rp[0].y);
-        for(let i = 1; i < rp.length - 1; i++) cx.quadraticCurveTo(rp[i].x, rp[i].y, (rp[i].x + rp[i + 1].x) / 2, (rp[i].y + rp[i + 1].y) / 2);
-        cx.lineTo(rp[rp.length - 1].x, rp[rp.length - 1].y);
-        cx.strokeStyle = col; cx.lineWidth = w; cx.setLineDash(dash || []); cx.stroke(); cx.setLineDash([]);
-      };
-      cx.lineCap = 'round'; cx.lineJoin = 'round';
-      ropeLine(OUT, 2.4 * SZ + B.outlineW * 1.6); ropeLine(white ? '#fff' : '#9a8157', 2.4 * SZ);
-      if(!white) ropeLine('#cdb680', 1.1, [1.2, 1.7]);
-      { const kn = rp[3], t1 = pt(-10.6, 8 + sw * .02, 0), t2 = pt(-9.8, 10.8, 0);
-        [[t1, 2.2], [t2, 2.2]].forEach(([t, w]) => { cx.beginPath(); cx.moveTo(kn.x, kn.y); cx.quadraticCurveTo((kn.x + t.x) / 2 + sw * .3, (kn.y + t.y) / 2, t.x, t.y); cx.strokeStyle = OUT; cx.lineWidth = w + B.outlineW * 1.4; cx.stroke(); });
-        [[t1, 2.2], [t2, 2.2]].forEach(([t, w]) => { cx.beginPath(); cx.moveTo(kn.x, kn.y); cx.quadraticCurveTo((kn.x + t.x) / 2 + sw * .3, (kn.y + t.y) / 2, t.x, t.y); cx.strokeStyle = white ? '#fff' : '#9a8157'; cx.lineWidth = w; cx.stroke(); });
-        cx.beginPath(); cx.arc(kn.x, kn.y, 2.3, 0, 7); cx.fillStyle = white ? '#fff' : '#8a7048'; cx.fill(); cx.strokeStyle = OUT; cx.lineWidth = B.outlineW * .8; cx.stroke(); }
+      // APRON FLAP + WAIST ROPE: previously drawn here behind the belly, but now unified into drawApronLower() called from front()
+      // so the legs cannot obscure it and to eliminate doubled rendering/stitching artifacts.
 
       // main body: hunched back, round chest, enormous belly that sags below the belt
       const BODY_PTS = [pt(-3.5, -7.5), pt(1, -9.8), pt(6, -10.8), pt(11, -11.2), pt(15.5, -9), pt(17.4, -3), pt(17, 3.5),
@@ -438,8 +593,10 @@
 
    // ---------- face details (little scowl) drawn on the head ----------
     front(cx, f, t, S, P){
+      CUR = CUR || stOf(f);
       const wh = f.flash > 0;
-            cx.save(); drawApronLower(cx, S, f, wh); cx.restore();
+      drawAttackSmear(cx, S, f, t, wh);
+      cx.save(); drawApronLower(cx, S, f, wh); cx.restore();
       cx.save(); drawHook(cx, S, f, P, wh); cx.restore();      // hook in the FRONT hand (fist redrawn over the handle). The back-hand cleaver is drawn in behind()
       if(!wh){        // near forearm: faint stubble, old healed scars; darkened elbow and knee (bare, aged skin)
         const A = S.aN, dx = A.hand.x - A.el.x, dy = A.hand.y - A.el.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
@@ -493,16 +650,31 @@
       });
 
    
-      // INSANE EYES: plain white circles, no pupils, ringed in black
-      // ONE ANGRY EYE (side view): white, no pupil, black ring. The lid slants down toward the nose.
-      // ONE ANGRY EYE (side view), small: white, no pupil, black ring. The lid slants down toward the nose.
-      // ONE ROUND EYE (side view), small: white circle, no pupil, black ring, angry brow slanting down toward the nose
+      // INSANE EYE (side view): white, no pupil, black ring. The lid slants down toward the nose.
       cx.fillStyle = '#120a08';
       cx.beginPath(); cx.moveTo(1.9, -3.0); cx.lineTo(4.9, -1.9); cx.lineTo(4.9, -1.2); cx.lineTo(1.9, -2.3); cx.closePath(); cx.fill();
       const ex = 3.5, ey = -.6, er = .85;
       cx.fillStyle = 'rgba(0,0,0,.35)'; cx.beginPath(); cx.arc(ex, ey, er * 2.1, 0, Math.PI * 2); cx.fill();   // soft black bruise
       cx.fillStyle = '#000'; cx.beginPath(); cx.arc(ex, ey, er * 1.5, 0, Math.PI * 2); cx.fill();            // hard black ring
-      cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(ex, ey, er, 0, Math.PI * 2); cx.fill();                   // white circle                                    // white eye                                    // white eye
+
+      // Eye life: rare blink or subtle twitch, tiny red vein
+      const blinkCycle = (t * 0.24) % 1;
+      const blink = blinkCycle < 0.03 ? Math.sin((blinkCycle / 0.03) * Math.PI) : 0;
+      const twitch = Math.sin(t * 19) * Math.sin(t * 31) > 0.85 ? 0.18 : 0;
+      const eyeScaleY = Math.max(0.08, 1 - blink * 0.9);
+
+      cx.save();
+      cx.translate(ex, ey + twitch * 0.3);
+      cx.scale(1, eyeScaleY);
+      cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(0, 0, er, 0, Math.PI * 2); cx.fill();                   // white circle
+
+      // Tiny bloodshot red vein in the corner
+      if(eyeScaleY > 0.4){
+        cx.strokeStyle = 'rgba(180, 24, 28, 0.75)'; cx.lineWidth = 0.35;
+        cx.beginPath(); cx.moveTo(-er * 0.65, -er * 0.15); cx.lineTo(-er * 0.15, -er * 0.35); cx.lineTo(0.1, -er * 0.15); cx.stroke();
+        cx.beginPath(); cx.moveTo(-er * 0.3, -er * 0.25); cx.lineTo(-er * 0.2, 0.1); cx.stroke();
+      }
+      cx.restore();
       // small ear, half buried under the neck roll
       cx.fillStyle = '#c99a7e'; cx.beginPath(); cx.ellipse(-1.7, 1, 1.15, 1.7, .15, 0, Math.PI * 2); cx.fill();
       cx.strokeStyle = '#7a4a3a'; cx.lineWidth = .55; cx.stroke();
@@ -518,12 +690,18 @@
       cx.beginPath(); cx.ellipse(2.4, 2.5, 2.1, 1.4, 0, 0, Math.PI * 2); cx.fill();
       cx.restore();
 
-      // mouth & jaw expression: opens wide on slaughterhouse/vomit, otherwise tight slack jaw with crooked teeth
+      // mouth & jaw expression: opens wide on slaughterhouse/vomit; snarls showing crooked teeth during basic attack snap windows, otherwise tight mouth with teeth peeking out
+      const ap = atkP(f);
+      const isBasic = f.atk > 0 && !(f.A && f.A.skill);
+      const st = stepOf(f);
+      const inSnap = isBasic && ap >= st.snap[0] && ap <= st.snap[1];
+      const snarl = inSnap ? Math.sin(((ap - st.snap[0]) / (st.snap[1] - st.snap[0])) * Math.PI) * 0.45 : 0;
+
       const bite = f.A && f.A.skill === 'vomit' && f.atk > 0
-        ? Body.keys(atkP(f), [[0,0],[.15,.2],[.4,.4],[.5,1],[.92,1],[1,0]])
+        ? Body.keys(ap, [[0,0],[.15,.2],[.4,.4],[.5,1],[.92,1],[1,0]])
         : f.A && f.A.skill === 'slaughterhouse' && f.atk > 0
-          ? Body.keys(atkP(f), [[0,0],[.30,0],[.32,.8],[.35,0],[.38,0],[.40,.8],[.43,0],[.46,0],[.475,.8],[.50,0],[.66,0],[.70,1],[.75,.1],[.80,1],[.86,1],[.90,0],[1,0]])
-          : 0;
+          ? Body.keys(ap, [[0,0],[.30,0],[.32,.8],[.35,0],[.38,0],[.40,.8],[.43,0],[.46,0],[.475,.8],[.50,0],[.66,0],[.70,1],[.75,.1],[.80,1],[.86,1],[.90,0],[1,0]])
+          : snarl;
 
       if(bite > .08){
         const op = 1.0 + bite * 2.8;
@@ -531,12 +709,16 @@
         cx.fillStyle = '#d6c58a';
         for(let i = 0; i < 3; i++){
           const tx = 1.5 + i * 1.25;
-          cx.beginPath(); cx.moveTo(tx, 2.8); cx.lineTo(tx + .6, 2.8); cx.lineTo(tx + .3, 4.0); cx.closePath(); cx.fill();
+          cx.beginPath(); cx.moveTo(tx, 2.8); cx.lineTo(tx + .6, 2.8); cx.lineTo(tx + .3, 2.8 + op * 0.55 + 0.6); cx.closePath(); cx.fill();
         }
       } else {
-        // flat, grim mouth: no smile, ends turn slightly down
+        // flat, grim mouth: no smile, ends turn slightly down, crooked teeth visible
         cx.strokeStyle = '#2a0a0a'; cx.lineWidth = .9; cx.lineCap = 'round';
         cx.beginPath(); cx.moveTo(1.5, 3.9); cx.quadraticCurveTo(3.1, 3.1, 4.6, 3.9); cx.stroke();
+        // crooked teeth showing in the idle mouth
+        cx.fillStyle = '#d6c58a';
+        cx.beginPath(); cx.moveTo(2.4, 3.5); cx.lineTo(2.9, 3.4); cx.lineTo(2.7, 4.15); cx.closePath(); cx.fill();
+        cx.beginPath(); cx.moveTo(3.3, 3.4); cx.lineTo(3.8, 3.45); cx.lineTo(3.5, 4.05); cx.closePath(); cx.fill();
       }
       // nose: rounded tip + nostril wing + subtle highlight & nostril
       cx.strokeStyle = OUTL; cx.lineWidth = 1.1;
@@ -586,7 +768,13 @@
     },
 
     // ---------- sprite layering order: back cleaver + belly spring first, then torso, front hook & head ----------
-    behind(cx, f, t, S, P){ CUR = simBelly(f, t, S); drawCleaver(cx, S, f, CUR, f.flash > 0); },
+    behind(cx, f, t, S, P){
+      CUR = simBelly(f, t, S);
+      const run = clamp(Math.abs(f.vx || 0) / 140, 0, 1);
+      drawAtmosphere(cx, f, t, run, f.flash > 0);
+      drawCleaver(cx, S, f, CUR, f.flash > 0);
+      checkCleaverImpact(f, CUR);
+    },
 
     // ---------- HEAVY idle / waddle / landing ----------
     pose(tg, f, t, run, K){
@@ -680,4 +868,4 @@
       tg.kN = st.kN ? K(p, st.kN) : STAND.kN;  tg.kF = st.kF ? K(p, st.kF) : STAND.kF;
     }
   });
-})();i
+})();

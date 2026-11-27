@@ -13,7 +13,24 @@
 //  If you have a TURN server put it in ICE below.
 const Net = (() => {
   const PROTO = 1, PREFIX = 'vantacore-', CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const ICE = null;                                       // e.g. {iceServers:[{urls:'stun:stun.l.google.com:19302'}, {urls:'turn:your.turn.server:3478', username:'u', credential:'p'}]}
+  // ---- CONNECTION HELP (fill in ONE of these so players on strict networks can still connect) ----
+  // A) Free TURN relay from metered.ca (sign up -> create an app -> copy its name and API key; free tier ~500 MB/month = many matches):
+  const METERED = {app:'', key:''};                       // e.g. {app:'vantacore', key:'abc123...'}   (app = the part before .metered.live)
+  // B) Or any TURN server you have:
+  const TURN = null;                                      // e.g. {urls:['turn:your.server:3478', 'turns:your.server:443?transport=tcp'], username:'u', credential:'p'}
+  const STUN = [{urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun1.l.google.com:19302'}, {urls:'stun:global.stun.twilio.com:3478'}];
+  async function getIce(){
+    let servers = [...STUN];
+    try{
+      if(METERED.app && METERED.key){
+        const r = await Promise.race([fetch('https://' + METERED.app + '.metered.live/api/v1/turn/credentials?apiKey=' + METERED.key), new Promise((_, no) => setTimeout(no, 5000))]);
+        const j = await r.json(); if(Array.isArray(j)) servers = servers.concat(j);
+      }
+    }catch(e){ console.warn('TURN credentials not loaded', e); }
+    if(TURN) servers.push(TURN);
+    return {iceServers:servers};
+  }
+  const HAS_TURN = !!((METERED.app && METERED.key) || TURN);
   const SNAP_MS = 50, INPUT_MS = 33, INTERP_MS = 55;
   const SKIP_F = new Set(['c', 'K', 'cur', 'tgt', 'sh', 'skeletons']);             // fighter fields never sent (static data / recomputed on the guest / local-only / only the logic reads them: draw uses G.skeletons)
   const SKIP_KEY = new Set(['sm']);                                                // art.js builds these while drawing (Nethros' smoke): the guest makes its own
@@ -64,9 +81,10 @@ const Net = (() => {
   function host(){
     if(!peerOk()) return;
     reset(); role = 'host'; status('creating a room...'); step('start');
-    const tryOpen = n => {
+    const tryOpen = async n => {
       code = newCode();
-      const p = peer = new Peer(PREFIX + code, ICE ? {config:ICE} : undefined);
+      const ice = await getIce(); if(role !== 'host') return;
+      const p = peer = new Peer(PREFIX + code, {config:ice});
       p.on('open', () => { if(peer !== p) return; step('room'); buildGrid(); status('share this code - waiting for your opponent'); refresh(); });
       p.on('connection', c => {
         if(conn){ c.on('open', () => { c.send({t:'reject', why:'Room is full'}); setTimeout(() => c.close(), 300); }); return; }
@@ -81,17 +99,18 @@ const Net = (() => {
     };
     tryOpen(0);
   }
-  function join(c0){
+  async function join(c0){
     const c = (c0 || '').toUpperCase().replace(/[^A-Z]/g, '');
     if(c.length !== 4){ status('enter the 4-letter room code', true); return; }
     if(!peerOk()) return;
     reset(); role = 'guest'; code = c; status('connecting to room ' + c + '...');
-    const p = peer = new Peer(undefined, ICE ? {config:ICE} : undefined);
+    const my = role, ice = await getIce(); if(role !== my) return;
+    const p = peer = new Peer(undefined, {config:ice});
     p.on('open', () => {
       if(peer !== p) return;
       const cn = p.connect(PREFIX + c, {serialization:'json', reliable:true});
       setupConn(cn);
-      setTimeout(() => { if(peer === p && conn === cn && !joined) fail('Could not reach that room (strict network? wrong code?)'); }, 15000);
+      setTimeout(() => { if(peer === p && conn === cn && !joined) fail('Could not connect to that room (' + (iceState || 'no answer') + '). ' + (HAS_TURN ? 'Check the code and that the host is still waiting.' : 'Your networks probably block direct connections - a TURN relay is needed (see net.js).')); }, 20000);
     });
     p.on('error', err => { if(peer === p) fail(netError(err)); });
   }
@@ -102,8 +121,14 @@ const Net = (() => {
     if(t === 'browser-incompatible') return 'This browser does not support online play';
     return 'Connection problem' + (t ? ' (' + t + ')' : '');
   }
+  let iceState = '';
+  function watchIce(c){   // shows what the WebRTC link is doing (checking / failed...) so a failed join can be explained
+    iceState = '';
+    const hook = () => { const pc = c.peerConnection; if(!pc) return false; pc.addEventListener('iceconnectionstatechange', () => { iceState = 'ice ' + pc.iceConnectionState; if(conn === c && !joined) status('connecting... (' + iceState + ')'); }); return true; };
+    if(!hook()){ const t = setInterval(() => { if(hook() || conn !== c) clearInterval(t); }, 100); }
+  }
   function setupConn(c){
-    conn = c;
+    conn = c; watchIce(c);
     c.on('open', () => { if(role === 'guest') send({t:'hello', proto:PROTO, ver:APP_VERSION}); });
     c.on('data', onMsg);
     c.on('close', () => { if(conn === c) onClose(); });

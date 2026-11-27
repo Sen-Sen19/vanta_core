@@ -183,26 +183,32 @@ registerSW();
 function askNotifPermission(){            // must run from a tap, browsers block it otherwise
   try{ if('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); }catch(e){}
 }
-async function sysNotify(title, body){
+async function sysNotify(title, body){            // silent: no sound, no vibration, no on-screen toast
   try{
-    if(!('Notification' in window)){ showToast('Notifications not supported here'); return; }
-    if(!window.isSecureContext){ showToast('Notifications need https'); return; }
-    if(Notification.permission === 'default'){ try{ await Notification.requestPermission(); }catch(e){} }
-    if(Notification.permission !== 'granted'){ showToast('Notifications blocked - allow them in site settings'); return; }
+    if(!('Notification' in window) || !window.isSecureContext) return;
+    if(Notification.permission !== 'granted') return;
     if('serviceWorker' in navigator){
       const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, rej) => setTimeout(rej, 4000))]);
-      await reg.showNotification(title, {body, tag:'vanta-fs'});
-    }else new Notification(title, {body, tag:'vanta-fs'});
-  }catch(e){ showToast('Notification failed: ' + (e && e.message ? e.message : 'service worker not ready')); }
+      await reg.showNotification(title, {body, tag:'vanta-fs', silent:true, renotify:false});
+    }else new Notification(title, {body, tag:'vanta-fs', silent:true});
+  }catch(e){}
+}
+async function clearNotif(){                       // remove the notification when fullscreen ends
+  try{
+    if('serviceWorker' in navigator){
+      const reg = await navigator.serviceWorker.ready;
+      const list = await reg.getNotifications({tag:'vanta-fs'});
+      list.forEach(n => n.close());
+    }
+  }catch(e){}
 }
 let wasFs = false;
 function syncFsBtn(){
   const now = isFs();
   $('#fsBtn').innerHTML = now ? '&#10005; EXIT FS' : '&#9974; FULLSCREEN';
   if(now !== wasFs){
-    const msg = now ? 'Fullscreen on' : 'Fullscreen off';
-    showToast(msg);
-    sysNotify('VANTA CORE', msg);
+    if(now) sysNotify('VANTA CORE', 'Running');
+    else clearNotif();
     wasFs = now;
   }
 }

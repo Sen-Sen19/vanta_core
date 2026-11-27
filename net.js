@@ -15,7 +15,7 @@ const Net = (() => {
   const PROTO = 1, PREFIX = 'vantacore-', CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   // ---- CONNECTION HELP (fill in ONE of these so players on strict networks can still connect) ----
   // A) Free TURN relay from metered.ca (sign up -> create an app -> copy its name and API key; free tier ~500 MB/month = many matches):
-  const METERED = {app:'', key:''};                       // e.g. {app:'vantacore', key:'abc123...'}   (app = the part before .metered.live)
+  const METERED = {app:'Sen0219', key:'195a31e104a72e971faf36020b76d5c2ebb4'};                       // e.g. {app:'vantacore', key:'abc123...'}   (app = the part before .metered.live)
   // B) Or any TURN server you have:
   const TURN = null;                                      // e.g. {urls:['turn:your.server:3478', 'turns:your.server:443?transport=tcp'], username:'u', credential:'p'}
   const STUN = [{urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun1.l.google.com:19302'}, {urls:'stun:global.stun.twilio.com:3478'}];
@@ -23,7 +23,7 @@ const Net = (() => {
     let servers = [...STUN];
     try{
       if(METERED.app && METERED.key){
-        const r = await Promise.race([fetch('https://' + METERED.app + '.metered.live/api/v1/turn/credentials?apiKey=' + METERED.key), new Promise((_, no) => setTimeout(no, 5000))]);
+     const r = await Promise.race([fetch('https://' + METERED.app + '.metered.live/api/v1/turn/credentials?apiKey=' + METERED.key), new Promise((_, no) => setTimeout(no, 5000))]);
         const j = await r.json(); if(Array.isArray(j)) servers = servers.concat(j);
       }
     }catch(e){ console.warn('TURN credentials not loaded', e); }

@@ -205,7 +205,7 @@
       const idle = 1 - run, b = Math.sin(t * 1.3), b2 = Math.sin(t * 1.3 - .9), b3 = Math.sin(t * 1.0 + 1.4);
       tg.lean = idle * b * .006 + run * .1;
       tg.head = idle * b2 * .008 - run * .02;
-      tg.aN = idle * (.12 + b2 * .02) + run * -.4;   tg.eN = .2 + idle * (.12 + b3 * .02) + run * .15;
+      tg.aN = idle * (.3 + b2 * .02) + run * -.4;   tg.eN = .2 + idle * (.2 + b3 * .02) + run * .15;
       tg.aF = idle * (-.42 - b3 * .02) + run * -1.0;   tg.eF = .15 + idle * (.1 - b2 * .02) + run * .2;
       legs(tg, HOVER + b * .9 * FLOAT);
     },
@@ -277,7 +277,7 @@
             cx.strokeStyle = i % 2 ? DEEP : FOLD; cx.lineWidth = .7;
             cx.beginPath(); cx.moveTo(sx - 6 + i * 2.6, sy + 2); cx.quadraticCurveTo(lerp(sx - 6 + i * 2.6, q[0], .4) - 1.6, lerp(sy, q[1], .5), q[0], q[1] - 3); cx.stroke();
           }
-          for(let i = 0; i < hem.length; i += 4) ribbon(cx, hem[i][0], hem[i][1] - 1, 9 + (i % 3) * 3, i * 1.7, t, trail, .5);
+          for(let i = 0; i < hem.length; i += 4) ribbon(cx, hem[i][0], hem[i][1] - 1, 9 + (i % 3) * 3, i * 1.7, t, trail, .28);
         }
       }
       cx.restore();
@@ -315,7 +315,7 @@
       // 2) HOOD
       const h = S.head, ang = Math.atan2(h.x - S.sh.x, -(h.y - S.sh.y)), A = f.A || {};
       const p = f.atk > 0 && A.time ? clamp(1 - f.atk / A.time, 0, 1) : -1;
-      cx.save(); cx.translate(h.x, h.y); cx.rotate(ang); cx.scale(.82, .82);
+      cx.save(); cx.translate(h.x, h.y); cx.rotate(ang); cx.scale(.96, .96);
       const hoodPath = () => {
         cx.beginPath(); cx.moveTo(5.2, 9.2);
         cx.bezierCurveTo(8.8, 7.2, 10.6, 2.4, 9.6, -2.8);
@@ -428,7 +428,7 @@
         hem.forEach(q => cx.lineTo(q[0], q[1])); cx.lineTo(Wf[0], Wf[1]); cx.quadraticCurveTo(Mf[0], Mf[1], Sf[0], Sf[1]); cx.lineTo(Nf[0], Nf[1]); cx.closePath();
       };
       const drape = [pt(.9, 1.5), pt(.52, 7), [c0[0] + 6.4, a.y + 2]].concat(hemPts(c0[0], by, [[10.5, 19], [8, 23], [5.5, 18.5], [3, 22], [.8, 18.5]], tr, tt, .6), [pt(.45, 1.2)]);
-      const cape = Q([[1.12,-3],[1.03,-11],[.84,-12.6],[.66,-9.2],[.76,-7.6],[.56,-6.4],[.68,-4.6],[.54,-3.2],[.66,-1.4],[.52,.2],[.66,2],[.54,3.6],[.68,5.2],[.56,6.8],[.72,8.2],[.56,9.8],[.88,10.6],[1.03,9],[1.12,3.2]], 1.32);
+      const cape = Q([[1.12,-3],[1.03,-11],[.84,-12.6],[.66,-9.2],[.76,-7.6],[.56,-6.4],[.68,-4.6],[.54,-3.2],[.66,-1.4],[.52,.2],[.66,2],[.54,3.6],[.68,5.2],[.56,6.8],[.72,8.2],[.56,9.8],[.88,10.6],[1.03,9],[1.12,3.2]], 1.08);
 
       if(white){ poly(cx, under, '#fff'); robePath(); cx.fillStyle = '#fff'; cx.fill(); poly(cx, drape, '#fff'); poly(cx, cape, '#fff'); return; }
 
@@ -447,8 +447,8 @@
         line(pt(.62, w0 * 1.25), [q[0], lerp(a.y + 2, q[1], .55)], (i % 2 ? 1 : -1) * 1.3, i % 2 ? DEEP : FOLD, .7);
       }
 
-      for(let i = 0; i < under.length; i += 2) ribbon(cx, under[i][0], under[i][1] - 1, 10 + (i % 3) * 2.5, i * 1.3 + 2, tt, tr, .62);
-      for(let i = 0; i < hem.length; i += 4) ribbon(cx, hem[i][0], hem[i][1] - 1, 8 + (i % 3) * 2, i * 2.1, tt, tr, .5);
+      for(let i = 0; i < under.length; i += 2) ribbon(cx, under[i][0], under[i][1] - 1, 10 + (i % 3) * 2.5, i * 1.3 + 2, tt, tr, .35);
+      for(let i = 0; i < hem.length; i += 4) ribbon(cx, hem[i][0], hem[i][1] - 1, 8 + (i % 3) * 2, i * 2.1, tt, tr, .28);
 
       poly(cx, drape, fade('#323236', '#232326', 'rgb(20,20,23)'), null);
       cx.strokeStyle = gs; cx.lineWidth = .6; cx.beginPath(); drape.forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke();
@@ -456,7 +456,7 @@
       cx.strokeStyle = ge; cx.lineWidth = .5; cx.beginPath(); drape.slice(2, drape.length - 1).forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke();
       cx.restore();
 
-      const cg = cx.createLinearGradient(b.x, b.y, a.x, a.y + 6); cg.addColorStop(0, '#3a3a3f'); cg.addColorStop(1, '#1d1d20');
+      const cg = cx.createLinearGradient(b.x, b.y, a.x, a.y + 6); cg.addColorStop(0, '#2b2b2f'); cg.addColorStop(1, '#151517');
       poly(cx, cape, cg, INK, .7);
       cx.strokeStyle = EDGE; cx.lineWidth = .6; cx.lineCap = 'round';
       [[0, 3], [15, 18]].forEach(([i0, i1]) => { cx.beginPath(); cape.slice(i0, i1).forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke(); });

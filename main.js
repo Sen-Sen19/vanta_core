@@ -158,7 +158,7 @@ function toggleFullscreen(){
     try{ fsExit.call(document); }catch(e){}
   }else enterFullscreen();
 }
-
+// ---- TOAST (small notification banner) ----
 let toastEl = null, toastTimer = 0;
 function showToast(msg){
   if(!toastEl){
@@ -173,7 +173,7 @@ function showToast(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
 }
-
+// ---- SYSTEM NOTIFICATION (shows in the phone's notification bar) ----
 let swReg = null;
 function registerSW(){
   if(!('serviceWorker' in navigator)) return;
@@ -212,6 +212,17 @@ if(!fsReq) $('#fsBtn').classList.add('hide');   // e.g. iPhone Safari has no ful
 $('#fsBtn').onclick = () => { askNotifPermission(); toggleFullscreen(); };
 // also try once on the first tap anywhere (skipped if the tap is on the fullscreen button)
 document.addEventListener('pointerdown', e => { if(!e.target.closest('#fsBtn')){ askNotifPermission(); enterFullscreen(); } }, {once:true});
+
+// ---- VERSION LABEL (bump this each time you push, so you can tell the new code loaded) ----
+const APP_VERSION = 'v1.3 notif';
+(function(){
+  const host = document.querySelector('#menu .menu');
+  if(!host) return;
+  const v = document.createElement('div');
+  v.id = 'ver';
+  v.textContent = APP_VERSION;
+  host.appendChild(v);
+})();
 
 // ---- HARD REFRESH ----
 async function hardRefresh(){

@@ -482,17 +482,30 @@
       const spr = getSmoke();
       cx.save();
       if(f.gr){ cx.beginPath(); cx.rect(x - r * 2, y - r * 2, r * 4, floor - (y - r * 2)); cx.clip(); }
-      const hz = cx.createRadialGradient(x, y, 4, x, y, r * .7);
-      hz.addColorStop(0, 'rgba(3,3,4,' + (.5 * al) + ')'); hz.addColorStop(1, 'rgba(3,3,4,0)');
+      const hz = cx.createRadialGradient(x, y, r * .2, x, y, r);
+      hz.addColorStop(0, 'rgba(3,3,4,' + (.05 * al) + ')'); hz.addColorStop(.6, 'rgba(3,3,4,' + (.16 * al) + ')');
+      hz.addColorStop(.9, 'rgba(3,3,4,' + (.3 * al) + ')'); hz.addColorStop(1, 'rgba(3,3,4,0)');
       cx.fillStyle = hz; cx.fillRect(x - r, y - r, r * 2, r * 2);
       P.forEach(q => {
         const k = q.life / q.max, d = Math.hypot(q.x, q.y) / r;
-        const a = Math.sin(Math.PI * k) * .5 * al * Math.max(0, 1 - d * d * .8);
+        const a = Math.sin(Math.PI * k) * .36 * al * (.3 + .7 * Math.min(1, d / .8)) * Math.max(0, 1 - Math.pow(Math.max(0, d - .8) / .2, 2));
         if(a <= .01) return;
         const s = q.sz * (1 + k * .8);
         cx.globalAlpha = Math.min(1, a); cx.save(); cx.translate(x + q.x, y + q.y); cx.rotate(q.rot); cx.drawImage(spr, -s, -s, s * 2, s * 2); cx.restore();
       });
       cx.globalAlpha = 1; cx.restore();
+      if(f.gr){
+        const ry = Math.max(3, r * .075), tk = 28, spin = t * .22;
+        cx.save(); cx.lineCap = 'round';
+        cx.strokeStyle = 'rgba(175,175,184,' + (.38 * al) + ')'; cx.lineWidth = 1.3; cx.beginPath(); cx.ellipse(x, floor, r, ry, 0, 0, 7); cx.stroke();
+        cx.strokeStyle = 'rgba(120,120,128,' + (.22 * al) + ')'; cx.lineWidth = .9; cx.beginPath(); cx.ellipse(x, floor, r * .86, ry * .86, 0, 0, 7); cx.stroke();
+        for(let i = 0; i < tk; i++){
+          const a = spin + i * 6.2832 / tk, long = i % 4 === 0, ca = Math.cos(a), sa = Math.sin(a);
+          cx.strokeStyle = 'rgba(175,175,184,' + ((long ? .45 : .24) * al) + ')'; cx.lineWidth = long ? 1.4 : .9;
+          cx.beginPath(); cx.moveTo(x + ca * r, floor + sa * ry); cx.lineTo(x + ca * r * (long ? .8 : .9), floor + sa * ry * (long ? .8 : .9)); cx.stroke();
+        }
+        cx.restore();
+      }
     },
 
     gbHands(cx, H, t){

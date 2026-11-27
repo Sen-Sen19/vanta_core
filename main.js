@@ -220,7 +220,7 @@ $('#fsBtn').onclick = () => { askNotifPermission(); toggleFullscreen(); };
 document.addEventListener('pointerdown', e => { if(!e.target.closest('#fsBtn')){ askNotifPermission(); enterFullscreen(); } }, {once:true});
 
 // ---- VERSION LABEL (bump this each time you push, so you can tell the new code loaded) ----
-const APP_VERSION = 'v1.3 notif';
+const APP_VERSION = 'v1.4 notif';
 (function(){
   const host = document.querySelector('#menu .menu');
   if(!host) return;

@@ -1,0 +1,1 @@
+Characters.add({id:'alaric', name:'ALARIC', role:'Archer', color:'#a5c8ff', tag:'The Silver Moon Sentinel', hp:200, arm:4, spd:4.5, ult:'MOONLIGHT BARRAGE'});

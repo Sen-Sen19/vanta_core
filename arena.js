@@ -39,7 +39,7 @@ function mkF(c, idx, team = idx ? 1 : 0){   // idx = index in G.f (unique), team
   const K = Characters.skillsOf(c.id);   // K.skills = [skill I, skill II], K.ultimate, K.passive (see characters/titan/skills.js)
   return {c, idx, K, A:K.basic,
     sk:K.skills.map(d => ({cd:Array(d.charges || 1).fill(0)})),   // skill cooldowns: one timer per charge (each charge recharges on its own)
-    uc:0, pn:0, pt:0, bar:0, mag:0, rl:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0, snipe:null, snCd:0, snLock:false, lob:null, mo:0, moT:0, mbT:0, ns:null, ge:null, fc:null, fl:null, rec:0, fs:0, fsRdy:false, fsKey:0, fsGain:0, frz:0, rootT:0, lowG:0, ice:null, skeletons:[], descent:null, damnedDone:false,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
+    uc:0, pn:0, pt:0, bar:0, mag:0, rl:0, rush:null, skq:null, hk:null, slaughter:null, shd:null, shadows:[], onsl:null, fr:0, hLast:0, dv:0, dvKey:null, atkTok:0, tA:null, tAtk:0, vclaw:null, uhand:null, afterimg:null, slam:null, kdT:0, kdDur:0, slowVoidT:0, capturedBy:null, mk:0, bl:0, blDps:0, bt:0, snipe:null, shk:null, shGone:false, snCd:0, snLock:false, lob:null, mo:0, moT:0, mbT:0, ns:null, ge:null, fc:null, fl:null, rec:0, fs:0, fsRdy:false, fsKey:0, fsGain:0, frz:0, rootT:0, lowG:0, ice:null, skeletons:[], descent:null, damnedDone:false,                   // uc = ultimate cooldown, pn = passive hit count, pt = passive time left, bar = barrier HP, rush = charge in progress
     team, dead:false, tgt:null, cs:0, comboT:0, aqB:0, w:30, h:52, x:0, y:0, vx:0, vy:0, face: team ? -1 : 1, hp:c.hp, max:c.hp, stocks:3,
     jumps:2, gr:false, atk:0, atkCd:0, hitDone:true, stun:0, inv:0, drop:0, flash:0,
     jq:false, dq:false, aq:false, in:{l:0, r:0}, aiT:0, pl:idx === 0};   // pl = a human steers it (you, or the remote player online)
@@ -196,7 +196,8 @@ function ko(f){
   if(G.over || f.dead) return;
   if(G.sov && G.sov.src === f) endSysOv();   // Errata is KO'd: the override ends right away
   if(f.rit) ritualEnd(f); f.fear = 0; f.dread = null;
-  f.pq = null; f.mp = null; f.paint = null; f.trail = []; if(f.roller) rollerEnd(f);   // Miette: stacks gone, her paint trail is wiped
+  f.pq = null; f.shk = null; f.shGone = false; f.mp = null; f.paint = null; f.trail = []; if(f.roller) rollerEnd(f);   // Miette: stacks gone, her paint trail is wiped
+  if(G.gs && G.gs.src === f) G.gs = null;
   if(f.fc) fcRestore(f);   // Final Curtain: give him his own body and HP back before the reset
   // If either fighter is KO'd during a capture, release the other fighter and cancel the execution cleanly.
   G.f.forEach(q => {
@@ -219,7 +220,7 @@ function ko(f){
       }
     }
   }
-  f.mag = 0; f.rl = 0; f.hp = f.max; f.x = W/2; f.y = -40; f.vx = f.vy = 0; f.jumps = 2; f.inv = 1.6; f.stun = 0; f.atk = 0; f.gr = false; f.rush = null; f.bar = 0; f.pt = 0; f.pn = 0; f.hk = null; f.slaughter = null; f.capturedBy = null; f.mk = 0; f.bl = 0; f.stench = null; f.slowT = 0; f.vomit = null; f.heldT = 0; f.ritCd = 0; f.ritLock = false; f.fe = 0; f.feKey = null; f.shd = null; f.shadows = []; f.onsl = null; f.fr = 0; f.hLast = 0; f.dv = 0; f.dvKey = null; f.vclaw = null; f.uhand = null; f.afterimg = null; f.slam = null; f.kdT = 0; f.slowVoidT = 0; f.holy = null; f.impacted = false; f.slowHolyT = 0; f.sc = null; f.aegis = null; f.arE = 0; f.snipe = null; f.snCd = 0; f.snLock = false; f.lob = null; f.fs = 0; f.fsRdy = false; f.frz = 0; f.rootT = 0; f.lowG = 0; f.ice = null; f.mo = 0; f.moT = 0; f.mbT = 0; f.ns = null; f.ge = null; f.fl = null; f.rec = 0; f.stc = 0; f.stLast = 0; f.ls = null; f.sky = null; f.storm = null; f.re = null; f.br = null; f.skeletons = []; f.descent = null; f.damnedDone = false;
+  f.mag = 0; f.rl = 0; f.hp = f.max; f.x = W/2; f.y = -40; f.vx = f.vy = 0; f.jumps = 2; f.inv = 1.6; f.stun = 0; f.atk = 0; f.gr = false; f.rush = null; f.bar = 0; f.pt = 0; f.pn = 0; f.hk = null; f.goo = null; f.gooE = null; f.slaughter = null; f.capturedBy = null; f.mk = 0; f.bl = 0; f.stench = null; f.slowT = 0; f.vomit = null; f.heldT = 0; f.ritCd = 0; f.ritLock = false; f.fe = 0; f.feKey = null; f.shd = null; f.shadows = []; f.onsl = null; f.fr = 0; f.hLast = 0; f.dv = 0; f.dvKey = null; f.vclaw = null; f.uhand = null; f.afterimg = null; f.slam = null; f.kdT = 0; f.slowVoidT = 0; f.holy = null; f.impacted = false; f.slowHolyT = 0; f.sc = null; f.aegis = null; f.arE = 0; f.snipe = null; f.snCd = 0; f.snLock = false; f.lob = null; f.fs = 0; f.fsRdy = false; f.frz = 0; f.rootT = 0; f.lowG = 0; f.ice = null; f.mo = 0; f.moT = 0; f.mbT = 0; f.ns = null; f.ge = null; f.fl = null; f.rec = 0; f.stc = 0; f.stLast = 0; f.ls = null; f.sky = null; f.storm = null; f.re = null; f.br = null; f.skeletons = []; f.descent = null; f.damnedDone = false;
   if(f.dead){ f.x = -5000; f.y = -5000; f.hp = 0; f.inv = 999; f.stun = 0; }   // eliminated: parked off-screen, skipped by everything
 }
 
@@ -425,6 +426,16 @@ const SKILLS = {
     startSkillA(f, skillA(d, {time:T, cd:T, root:true, f0:T0 / T, f1:(T0 + T1) / T}));
     f.pq = {t:0, d, x0:f.x, y0:f.y, x1:g.x, y1:g.y, T0, T1, T2, T, H:70 + dist * .15 + Math.max(0, g.y - f.y) * .3, up:false, hit:false};
   },
+  // SUPER JUMP & SHICKA TOSS (Bear skill II): aimed ground spot (groundAim, same picking as Paintquake). A short crouch, a high jump to that spot, then (only after landing) he takes Shicka off his back,
+  // stands still aiming (cannot move or jump) and throws it in a straight line. The cooldown starts when Shicka is THROWN (toggle:true = no cooldown on the cast). See shkStep / shkThrow below.
+  superjump(f, o, d, ax, ay, m){
+    const g = groundAim(f, o, d, ax, ay, m); if(!g) return;
+    f.face = Math.sign(g.x - f.x) || f.face;
+    const J = sjGeom(f, g, d);
+    f.shk = {ph:'crouch', t:0, d, slot:f.K.skills.indexOf(d), x0:f.x, y0:f.y, x1:g.x, y1:g.y, T0:d.crouch ?? .18, T1:J.T1, H:J.H, Tg:d.grab ?? .34, Tt:d.recover ?? .28, e:0, sh:false, thrown:false, pHeld:false, err:0, botRel:0};
+    startSkillA(f, skillA(d, {time:1, root:true, noSlash:true, shk:f.shk}));
+    f.atk = .5; f.vx = 0;
+  },
   // MASTERPIECE (Miette ultimate): she hops up (d.jump s), hovers and paints a giant symbol on the floor under her (d.paint s), then it explodes (see mpStep / mpBlast), then she drops back down (d.land s).
   // Any hit on her before the explosion cancels it (cooldown becomes d.failCd). f.mp = {ph:'cast'|'fade', t, d, x, y0, ...}.
   masterpiece(f, o, d){
@@ -474,6 +485,15 @@ const SKILLS = {
     f.slaughter = {target:o, t:0, deploy:d.deploy, pull:d.pull || .38, hold:d.hold || 46, duration:d.duration, heal:d.heal, ox:o.x, oy:o.y, kick:0,
                    hits:(d.hits || []).map(h => ({...h})).sort((a, b) => a.p - b.p)};
     o.capturedBy = f.idx; o.vx = o.vy = 0; o.atk = 0; o.stun = 0; o.rush = null; o.hk = null; o.skq = null; o.capRot = 0;
+  },
+  // GOO PUNCH (Bear skill I): instant, no animation. A 50 / 50 roll coats his body with GREEN (slow) or PURPLE (damage over time) goo (f.goo = {kind, i}). The cooldown does NOT start when he casts:
+  // it is a `toggle` skill (cast = cooldown 0). The goo stays on him until a BASIC punch really lands on an enemy (missing keeps it): gooTransfer() moves it onto that enemy and only THEN starts d.cd.
+  goo(f, o, d){
+    const kind = Math.random() < .5 ? 'green' : 'purple', c = GOO_COL[kind];
+    f.goo = {kind, i:f.K.skills.indexOf(d)};
+    G.pops.push({x:f.x, y:f.y - f.h - 12, txt:kind === 'green' ? 'GREEN GOO' : 'PURPLE GOO', life:.7});
+    G.rings.push({x:f.x, y:f.y - f.h / 2, life:.22});
+    for(let i = 0; i < 16; i++) G.parts.push({x:f.x + (Math.random() - .5) * 22, y:f.y - Math.random() * f.h, vx:(Math.random() - .5) * 160, vy:-40 - Math.random() * 120, life:.5, col:c});
   },
   // STENCH (Putrid Stench): a TOGGLE. Press = the toxic cloud turns on and follows him. Press again = it turns off (then d.cd is the cooldown before he can turn it on again).
   // Enemies inside d.radius px take d.dps x their max HP per second and are slowed by d.slow (0.4 = 40% slower).
@@ -672,6 +692,31 @@ const SKILLS = {
     makeSovFx(Z);
     G.pops.push({x:f.x, y:f.y - f.h - 34, txt:'SYSTEM OVERRIDE', life:1.1});
   },
+  // GIANT SHICKA (Bear ultimate): no aim. 3 phases:
+  //   Phase 1 'emerge' (d.emerge s): a huge ice block appears at arena centre, Shicka bursts out (ice chunks fly), cracks spread.
+  //   Phase 2 'rise'   (d.rise   s): Giant Shicka floats upward above the arena.
+  //   Phase 3 'stomp'  (d.stomp  s): free-falls belly-down, slams the ground. On landing a massive shockwave spreads along the floor.
+  //   The shockwave only hits grounded enemies (dodge by being airborne). d.swR = max shockwave radius, d.swSpd = spread px/s.
+  //   G.gs holds the whole state; Bear is rooted for the full cast duration.
+  giantshicka(f, o, d){
+    const my = G.P.find(p => p.main) || G.P[0];
+    const cx = W / 2, gy = my.y;
+    const T = (d.emerge || 1.4) + (d.rise || 1.0) + (d.stomp || 1.1);
+    startSkillA(f, skillA(d, {time:T, cd:T, root:true, noSlash:true}));
+    G.gs = {src:f, d, t:0, ph:'emerge', cx, gy, iceK:0, cracks:[], swR:0, swDone:false, hid:++HID,
+      shY: gy - 40,   // Shicka's current Y (feet)
+      shX: cx,
+      iceChunks: Array.from({length:16}, (_, i) => ({
+        x: cx + (Math.random() - .5) * 60, y: gy - 60,
+        vx: (Math.random() - .5) * 480, vy: -180 - Math.random() * 300,
+        rot: Math.random() * 6.28, vr: (Math.random() - .5) * 8,
+        w: 10 + Math.random() * 22, life: 1.0
+      }))
+    };
+    G.pops.push({x:f.x, y:f.y - f.h - 34, txt:'GIANT SHICKA!', life:1.3});
+    G.shake = Math.max(G.shake, .18);
+  },
+
   // HAND OF THE ABYSS (Umbra ultimate): see handStep.
   abysshand(f, o, d){
     const c1 = d.rift, c2 = c1 + d.rise, c3 = c2 + d.lift, c4 = c3 + d.close, c5 = c4 + d.crush, c6 = c5 + d.slam, total = c6 + d.sink;
@@ -1211,6 +1256,7 @@ function handStep(f, o, dt){
 }
 // CAN[kind](f, o, d) = a skill that is only allowed to cast when this is true. If it is false the cast is cancelled and NO cooldown is used.
 const CAN = {
+  goo(f){ return !f.goo; },                               // Bear I: already coated = nothing happens (the cooldown has not started yet either)
   gravebound(f){ return !!f.gr && !!platUnder(f); },   // Nethros I: the hands crawl along the floor he stands on
   damned(f){ return !!f.gr && !!platUnder(f); },       // Nethros II: summon skeletons from the ground
   fallendescent(f){ return !f.descent; },               // Nethros Ultimate: dive (castable from ground or air)
@@ -1225,6 +1271,7 @@ const CAN = {
   skyfall(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },
   bulletrain(f, o, d, ax, ay, m){ return !!groundAim(f, o, d, ax, ay, m); },   // Caliber ultimate: a valid ground target
   paintquake(f, o, d, ax, ay, m){ return !f.pq && !!groundAim(f, o, d, ax, ay, m); },   // there must be ground at the chosen spot
+  giantshicka(f, o, d, ax, ay, m){ return !G.gs; },
   masterpiece(f){ return !f.mp && f.gr && groundAt(f.x, f.y) != null; },                 // she needs floor under her to paint on
   sysoverride(f){ return !G.sov; },                                                     // one System Override at a time
   stormofruin(f){ return !f.storm; },                                                   // one storm at a time
@@ -1896,6 +1943,7 @@ function holyHit(src, o, A){
 }
 // PASSIVES. skills.js passive:{kind, ...}. No kind = 'skillHits' (Titan: Pain Is Fuel). kind 'marks' = Fresh Meat (below).
 function onLanded(src, o, A){
+  if(src.goo && !A.skill && !A.hid && o !== src) gooTransfer(src, o);   // Bear: a real basic punch lands = the goo jumps onto the enemy (cooldown starts)
   if(src.holy) holyHit(src, o, A);                    // Divine Impact: the first shield hit uses up the holy glow
   const P = src.K.passive; if(!P) return;
   if(!P.kind || P.kind === 'skillHits'){ if(A.skill) painIsFuel(src); }
@@ -2733,6 +2781,58 @@ function stenchStep(f, o, dt){
     if(o.hp <= 0) ko(o);
   }
 }
+// ---- BEAR: GOO PUNCH (skill kind 'goo', skills.js d = {slow, slowDur, dps, dotDur, cd}) ----
+// f.goo = {kind, i} = the goo ON HIS BODY (drawn as a coloured outline). A landed BASIC hit (no skill, no shockwave / stomp: those carry A.hid) moves it to the enemy (e.gooE = {kind, i, src, t, acc, pt}, also an outline)
+// and starts the skill cooldown. GREEN = the enemy is slowed (d.slow x) for d.slowDur s. PURPLE = d.dps x their max HP per second for d.dotDur s (a barrier soaks it first). A new goo replaces the old one.
+const GOO_COL = {green:'#5be21c', purple:'#a54dff'};
+function gooTransfer(src, o){
+  const g = src.goo, d = src.K.skills[g.i]; if(!d) { src.goo = null; return; }
+  src.goo = null; src.sk[g.i].cd[0] = d.cd;                                         // the cooldown starts NOW
+  o.gooE = {kind:g.kind, i:g.i, src:src.idx, t:g.kind === 'green' ? d.slowDur : d.dotDur, acc:0, pt:0};
+  const c = GOO_COL[g.kind];
+  G.pops.push({x:o.x, y:o.y - o.h - 12, txt:g.kind === 'green' ? 'SLOWED' : 'POISONED', life:.6});
+  for(let i = 0; i < 14; i++) G.parts.push({x:o.x + (Math.random() - .5) * 20, y:o.y - Math.random() * o.h, vx:(Math.random() - .5) * 220, vy:-60 - Math.random() * 120, life:.45, col:c});
+}
+function gooDrip(f, kind, dt){
+  if(Math.random() < dt * 9) G.parts.push({x:f.x + (Math.random() - .5) * f.w, y:f.y - Math.random() * f.h, vx:(Math.random() - .5) * 14, vy:20 + Math.random() * 40, life:.5, col:GOO_COL[kind]});
+}
+function gooTick(f, dt){
+  const E = f.gooE, src = G.f[E.src], d = src && src.K.skills[E.i];
+  E.t -= dt; gooDrip(f, E.kind, dt);
+  if(!d || E.t <= 0 || f.dead){ f.gooE = null; return; }
+  if(E.kind === 'green'){ f.slowAmt = f.slowT > 0 ? Math.max(f.slowAmt, d.slow) : d.slow; f.slowT = Math.max(f.slowT, .25); return; }
+  let dmg = f.max * d.dps * dt;
+  if(f.bar > 0){ const ab = Math.min(f.bar, dmg); f.bar -= ab; dmg -= ab; }
+  f.hp -= dmg; E.acc += dmg; E.pt -= dt;
+  if(E.pt <= 0){ E.pt = .5; if(E.acc >= 1) G.pops.push({x:f.x, y:f.y - f.h - 6, txt:Math.round(E.acc), life:.6}); E.acc = 0; }
+  if(f.hp <= 0) ko(f);
+}
+// ---- FLIGHT (VAELION). Only characters whose info.js has `fly:{...}` use this (see characters/vaelion/info.js for every number).
+// Ground: normal walk / run / jump. Air: left / right steers (floaty acceleration), you glide for as long as you like (the fall is slowed to fly.glideV and NEVER turned upward),
+// ATK in the air = WINGBEAT (small upward boost, then back to gliding; only fly.flaps of them, recharged one by one while he stands on a platform), JUMP = a plain jump, hold DOWN = dive. f.fly = {n (counts flaps, art.js reads it), cd, lift, buf}.
+const flyOf = f => f.fly || (f.fly = {n:0, cd:0, lift:0, buf:0, rc:0, left:f.c.fly.flaps});   // left = wingbeats left (refilled by standing on a platform)
+function flyBeat(f){
+  const d = f.c.fly, F = flyOf(f);
+  if(F.left <= 0) return;                                          // out of energy: gliding only, until he lands on a platform
+  if(F.cd > 0){ F.buf = d.buf; return; }                           // still recovering: remember the press for a moment
+  F.cd = d.cd; F.lift = d.liftT; F.buf = 0; F.n++; F.left--;
+  f.vy = Math.min(f.vy, -d.beatV); f.gr = false;
+}
+function flyStep(f, dt){
+  const d = f.c.fly, F = flyOf(f), ok = f.stun <= 0 && !(f.frz > 0) && !(f.rootT > 0) && !f.aegis && !f.snipe && f.capturedBy == null && !f.rush;
+  if(f.gr && F.left < d.flaps){ F.rc += dt; while(F.rc >= d.recharge && F.left < d.flaps){ F.left++; F.rc -= d.recharge; } }   // standing on a platform recharges ONE wingbeat every fly.recharge s (not instant)
+  else F.rc = 0;                                                  // in the air (or already full): no progress is kept
+  F.cd = Math.max(0, F.cd - dt); F.buf = Math.max(0, F.buf - dt); F.lift = f.gr ? 0 : Math.max(0, F.lift - dt);
+  if(F.buf > 0 && F.cd <= 0 && !f.gr && ok) flyBeat(f);          // a press shortly before the cooldown ended
+}
+function flyGlide(f, dt){
+  const d = f.c.fly;
+  if(f.vy <= d.glideV || f.bst || f.rush || f.fl || f.pq || f.stun > 0 || f.frz > 0 || f.lowG > 0 || f.capturedBy != null || f.onsl || f.descent || f.ls || (f.mp && f.mp.ph === 'cast') || f.sc) return;   // hurt / special moves: normal falling
+  const dive = (f.in.ay > .5) || (f.in.aim && f.in.aim.y > .7 && !f.in.held);   // DOWN key, or the stick pushed down
+  f.vy = dive ? Math.min(f.vy, d.diveV) : Math.max(d.glideV, f.vy - d.brake * dt);
+}
+function flyCeil(f){ const d = f.c.fly; if(f.y < d.ceil){ f.y = d.ceil; if(f.vy < 0) f.vy = 0; flyOf(f).lift = 0; } }   // top of the arena: no flying out of the top
+
 function stepF(f, o, dt){
   atkToken(f);   // tell this frame's attack apart from the last one (Divine Retribution counts one charge per attack)
   if(f.rec > 0) f.rec -= dt;
@@ -2755,14 +2855,16 @@ function stepF(f, o, dt){
   if(f.lob) lobStep(f, dt);                                                                               // Explosive Shot wind-up
   if(f.ice) iceAgeStep(f, o, dt);                                                                         // Eternal Ice Age
   if(f.pt > 0){ f.pt -= dt; if(f.pt <= 0) f.bar = 0; }                                                  // passive timer: boost + barrier end together
-  const sp = f.c.spd * 52 * (f.fc ? f.fc.d.speed : 1) * (f.pt > 0 ? 1 + f.K.passive.speed : 1) * (f.slowT > 0 ? 1 - f.slowAmt : 1) * paintSlow(f) * (f.roller ? f.roller.d.speed : 1) * (f.rit && f.rit.cast ? f.rit.d.speed : 1);   // slowAmt = from the enemy's Putrid Stench
+  const sp = f.c.spd * 52 * (f.fc ? f.fc.d.speed : 1) * (f.pt > 0 ? 1 + f.K.passive.speed : 1) * (f.slowT > 0 ? 1 - f.slowAmt : 1) * paintSlow(f) * (f.roller ? f.roller.d.speed : 1) * (f.rit && f.rit.cast ? f.rit.d.speed : 1) * (f.bst ? f.K.hold.steer : 1);   // slowAmt = from the enemy's Putrid Stench
   if(f.ge) geStep(f, dt);                                                                                  // Pellorin: The Grand Entrance
   if(f.ns) nsStep(f, dt);                                                                                  // Pellorin: No Strings Detached
   if(f.K.passive && f.K.passive.kind === 'momentum') momentumStep(f, dt);                               // Momentum gauge / buff timer
   if(f.fe > 0) f.fe -= dt;                                                                               // False Existence cooldown
   if(f.bl > 0) bleedTick(f, dt);
   if(f.stench) stenchStep(f, o, dt);
-  if(f.K.hold) ({aegis:aegisStep, vomit:vomitStep, sniper:sniperStep, roller:rollerStep, ritual:ritualStep}[f.K.hold.kind || 'vomit'] || (() => {}))(f, dt);   // no kind = vomit (Aftertaste); an unknown kind does nothing instead of running the vomit code
+  if(f.gooE) gooTick(f, dt);                                                                               // Bear: Goo Punch (green slow / purple damage) on this fighter
+  if(f.goo) gooDrip(f, f.goo.kind, dt);                                                                    // ... and the goo still on Bear's own body
+  if(f.K.hold) ({aegis:aegisStep, vomit:vomitStep, sniper:sniperStep, roller:rollerStep, ritual:ritualStep, stomp:stompStep}[f.K.hold.kind || 'vomit'] || (() => {}))(f, dt);   // no kind = vomit (Aftertaste); an unknown kind does nothing instead of running the vomit code
   if(f.vclaw) clawStep(f, o, dt);
   if(f.sky) skyStep(f, o, dt);                                                                            // Fulminar: Skyfall
   if(f.storm) stormStep(f, o, dt);                                                                        // Fulminar: Storm of Ruin
@@ -2770,6 +2872,8 @@ function stepF(f, o, dt){
   if(f.br) bulletRainStep(f, o, dt);                                                                      // Caliber: Bullet Rain
   if(f.afterimg){ f.afterimg.t += dt; if(f.afterimg.t > f.afterimg.life) f.afterimg = null; }
   if(f.slam) slamStep(f, dt);
+  if(f.shk && (f.stun > 0 || f.frz > 0 || f.rec > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.fakeFall)) shkEnd(f, true);   // Bear: hit / frozen / caught before the throw = Shicka stays with him
+  if(f.shGone){ const sl = f.K.skills.findIndex(q => q && q.kind === 'superjump'); if(sl >= 0 && f.sk[sl].cd.every(c => c <= 0)) shkBack(f); }   // Shicka returns to his backpack when the cooldown finishes
   if(f.pq && (f.stun > 0 || f.frz > 0 || f.rec > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.fakeFall)) pqEnd(f);   // Paintquake: a hit / grab before the landing cancels the hop (she falls)
   if(f.mp && f.mp.ph === 'cast' && (f.stun > 0 || f.frz > 0 || f.rec > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.fakeFall)){ if(f.mp.blasted){ f.mp.ph = 'fade'; f.mp.ft = 0; mpEnd(f, false); } else mpEnd(f, true); }   // Masterpiece: a hit before the explosion cancels it
   if(f.mp && f.mp.ph === 'fade'){ f.mp.ft += dt; if(f.mp.ft > (f.mp.d.fade || .8)) f.mp = null; }
@@ -2784,23 +2888,26 @@ function stepF(f, o, dt){
   else if(f.uhand){ handStep(f, o, dt); f.skq = null; }
   else if(f.ls){ lightStep(f, o, dt); }                          // Lightning Step: ball of lightning (own movement, invulnerable)
   else if(f.mp && f.mp.ph === 'cast'){ mpStep(f, o, dt); f.skq = null; }   // Masterpiece: hop, paint, explode (own movement, no other input)
-  else if(f.pq){ pqStep(f, o, dt); }                              // Paintquake: stomp, hop, smash (own movement, no other input)
+  else if(f.pq){ pqStep(f, o, dt); }
+  else if(f.shk){ shkStep(f, o, dt); }                            // Bear: Super Jump & Shicka Toss (own movement, then he stands still aiming: no other input)                              // Paintquake: stomp, hop, smash (own movement, no other input)
   else if(f.sc){ sacredChargeStep(f, o, dt); }                    // Sacred Charge: no jump, no attacks, no other skills (the joystick only steers)
   else if(f.descent){ fallenDescentStep(f, o, dt); f.skq = null; } // Nethros: Fallen Descent (invulnerable dive & crash)
   else if(f.stun <= 0 && !(f.frz > 0) && !(f.rec > 0)){   // rec = recovering after the Final Curtain: no moving, no attacks
     const dir = f.rootT > 0 ? 0 : f.fear > 0 ? f.fearDir : f.in.r - f.in.l;   // FEARED (Nethros aura): they run away from him and cannot steer
     const rooted = f.gr && f.atk > 0 && f.A.root;              // rooted punch: feet stay planted on the ground (no walking while swinging, so no foot sliding)
     const slowCharge = f.charging && f.A.chargeMove;               // Void Orb: he can shuffle slowly while charging (chargeMove = share of his speed)
+    const fa = f.c.fly && !f.gr ? f.c.fly : null;                  // airborne flyer (VAELION): his own air speed / acceleration
     if(rooted && !slowCharge){ if(dir && !f.aegis && !f.snipe) f.face = dir; f.vx = approach(f.vx, 0, (f.lunged ? 1800 : 3000) * dt); }
-    else if(dir){ f.face = dir; f.vx = approach(f.vx, dir * sp * (slowCharge ? f.A.chargeMove : 1), (f.gr ? 3000 : 1600) * dt); }
-    else f.vx = approach(f.vx, 0, (f.gr ? (f.atk > 0 && f.A.lunge ? 1800 : 2600) : 500) * dt);   // lunge slides (momentum) instead of stopping dead
+    else if(dir){ f.face = dir; f.vx = approach(f.vx, dir * sp * (slowCharge ? f.A.chargeMove : 1) * (fa ? fa.airSpd : 1), (f.gr ? 3000 : fa ? fa.airAcc : 1600) * dt); }
+    else f.vx = approach(f.vx, 0, (f.gr ? (f.atk > 0 && f.A.lunge ? 1800 : 2600) : fa ? fa.airDec : 500) * dt);   // lunge slides (momentum) instead of stopping dead
     if(f.rootT > 0) f.vx = 0;
-    if(f.jq && f.jumps > 0 && !f.aegis && !f.snipe && !(f.rootT > 0)){ f.vy = (f.jumps === 2 ? -840 : -780) * paintJump(f); f.jumps--; f.gr = false; }
+    if(f.c.fly && f.aq){ if(fa && (f.pl || f.remote) && !f.aegis && !f.snipe && !(f.rootT > 0)) flyBeat(f); f.aq = false; f.aqB = 0; }   // flyers (info.js fly) have no basic attack: ATK in the air = WINGBEAT (JUMP stays a plain jump)
+    if(f.jq && f.jumps > 0 && !f.aegis && !f.snipe && !f.bst && !(f.rootT > 0)){ f.vy = (f.jumps === 2 ? -840 : -780) * paintJump(f); f.jumps--; f.gr = false; f.bsLock = false; if(f.c.fly) flyOf(f).n++; }   // (flyers: the takeoff counts as a flap for the wings)
     if(f.dq && f.gr && !f.aegis && !f.snipe && !(f.rootT > 0)){ f.drop = .22; f.y += 3; f.gr = false; }
     if(!f.base) f.base = f.A;                                  // basic attack numbers (combo steps are layered on top)
     if(f.aq && f.base.combo) f.aqB = .18;                     // small input buffer, only for combo characters
     if(f.rl > 0) f.aqB = 0;                                    // reloading: a buffered ATK press is thrown away (no surprise shot when the reload ends)
-    if((f.aq || f.aqB > 0) && f.atkCd <= 0 && !(f.rl > 0)){   // reloading = he cannot start an attack (he can still walk and jump)
+    if((f.aq || f.aqB > 0) && f.atkCd <= 0 && !(f.rl > 0) && !(f.K.hold && f.K.hold.kind === 'stomp' && !f.gr)){   // reloading = he cannot start an attack (he can still walk and jump)
       const cb = f.base.combo;
       if(cb){ f.cs = f.comboT > 0 ? (f.cs + 1) % cb.length : 0; f.A = {...f.base, ...cb[f.cs], step:f.cs}; f.comboT = f.A.cd + .45; }else if(f.A.skill) f.A = f.base;   // next hit of the combo (after a skill: back to the basic attack numbers)
       f.atk = f.A.time; f.atkCd = f.A.cd; f.hitDone = false; f.aqB = 0;
@@ -2839,17 +2946,509 @@ function stepF(f, o, dt){
   }
 
   const py = f.y;
-  f.vy = (f.rush || f.fl || f.pq || (f.shd && f.shd.ph >= 1 && f.shd.ph <= 3)) ? 0 : Math.min(f.vy + GRAV * (f.lowG > 0 ? .5 : 1) * dt, 1200);   // a rush is a straight line (no gravity)
+  if(f.c.fly) flyStep(f, dt);                                                                          // flyer: wingbeat timers + buffered wingbeat
+  f.vy = f.bst ? Math.min(f.vy + f.bst.acc * dt, f.bst.vmax) : (f.rush || f.fl || f.pq || shkFly(f) || (f.shd && f.shd.ph >= 1 && f.shd.ph <= 3)) ? 0 : Math.min(f.vy + GRAV * (f.lowG > 0 ? .5 : 1) * (f.c.fly && f.fly.lift > 0 ? f.c.fly.liftG : 1) * dt, 1200);   // a rush is a straight line (no gravity). Belly Stomp (Bear): his own fall speed, it keeps speeding up
+  if(f.c.fly) flyGlide(f, dt);                                                                         // flyer: the wings slow a fall into a glide
   f.x += f.vx * dt; f.y += f.vy * dt;
+  if(f.c.fly) flyCeil(f);
+  const wasG = f.gr;                                                                                       // Bear: was he standing last frame (landing = !wasG && gr)
   f.gr = false;
-  if(f.vy >= 0 && f.drop <= 0 && !f.pq){
+  if(f.vy >= 0 && f.drop <= 0 && !f.pq && !shkFly(f)){
     for(const p of G.P){
       if(f.x + f.w/2 > p.x && f.x - f.w/2 < p.x + p.w && py <= p.y + 1 && f.y >= p.y){ f.y = p.y; f.vy = 0; f.gr = true; f.jumps = 2; if(f.fakeFall) fakeFallEnd(f, false); break; }
     }
     if(!f.gr && G.sov && G.sov.fakes.length) fakePlatStep(f, py);   // System Override: false platforms (solid only for Errata's team)
   }
+  bearAirStep(f, wasG);                                              // Bear: fall distance + landing shockwave (Bouncy Bear / Belly Stomp)
   if(f.fakeFall && f.y > H + 70) fakeFallEnd(f, true);              // fell out of the arena through a false platform: fall damage, then back in
   if(f.y > H + 260 || f.y < -520 || f.x < -260 || f.x > W + 260){ if(f.fc) endFC(f, 'dead'); else ko(f); }   // knocked out of the arena as the beast = the beast is destroyed (Pellorin loses nothing)
+}
+
+// ---- BEAR#012123: BOUNCY BEAR (passive kind 'bouncy') + BELLY STOMP (held key kind 'stomp') ----
+// FALL DISTANCE = how far below the highest point of this fall he lands (f.apex is tracked every frame, jumps, drops and knockback all count). No ceiling: the numbers just keep growing.
+// Both use the same shape: skills.js passive / hold = {dmg, dmgPx, r, rPx, kbx, kbxPx, kby, kbyPx, stunx, bounce, bouncePx, bounceMax}  ->  value = base + perPx x distance.
+// PASSIVE: any landing from at least passive.minFall px = a 360 degree shockwave around him + a small bounce. He never hurts himself.
+// BELLY STOMP: press ATK in the air (no charge, no cast) = he turns belly-down and dives with a speed that keeps rising (f.bst). Enemies he touches on the way down get hit once; on landing a bigger shockwave
+//   (same scaling) + a bounce. No cooldown, but f.bsLock stays on until he JUMPS himself again (the bounce does not count). It does not start with no platform under him (he would just fall out of the arena).
+function bearWave(f, d, dist){
+  const mx = f.x, my = f.y - 10, r = d.r + d.rPx * dist;
+  const A = {time:.3, cd:0, reach:0, hitFrom:0, hitTo:0, dmg:d.dmg + d.dmgPx * dist, kbx:d.kbx + d.kbxPx * dist, kby:d.kby + d.kbyPx * dist, stunx:d.stunx || 1, hitstop:0, noShake:true, noSlash:true, step:0, hid:++HID};
+  const big = Math.min(1, dist / 500);
+  G.waves.push({x:mx, y:my, r, life:.3 + .12 * big, max:.3 + .12 * big, col:'#ffd9a3', fill:'#a65a2e'}); G.rings.push({x:mx, y:f.y - 4, life:.25});
+  for(let i = 0, n = Math.min(60, 12 + Math.round(dist / 12)); i < n; i++) G.parts.push({x:mx + (Math.random() - .5) * 26, y:f.y - 2, vx:(Math.random() - .5) * (360 + r * 2), vy:-Math.random() * (180 + r), life:.45, col:Math.random() < .5 ? '#b9b2a8' : '#a65a2e'});
+  foesOf(f).forEach(e => { if(e.inv > .16 || Math.hypot(e.x - mx, (e.y - e.h / 2) - my) > r) return; hurt(e, {c:f.c, A, face:Math.sign(e.x - mx) || f.face, src:f}); });   // (inv .15 = only the short flicker after a hit: the stomp itself, so the landing still hurts the one he fell on)
+  G.shake = Math.max(G.shake, .14 + .3 * big); G.hs = Math.max(G.hs || 0, .04 + .08 * big);   // after the hits: hurt() sets its own shake / hit-stop
+}
+function bearBounce(f, d, dist){ f.vy = -Math.min(d.bounceMax, d.bounce + d.bouncePx * dist); f.gr = false; f.vx *= .5; f.bncT = G.t; }
+// ---- BEAR#012123: SUPER JUMP & SHICKA TOSS (skill II, kind 'superjump', skills.js d) ----
+// f.shk = {ph, t, d, slot, x0, y0, x1, y1, T0, T1, H, Tg, Tt, e, sh, thrown, pHeld, err, botRel}.  ph: 'crouch' (T0) -> 'jump' (T1, arc to the chosen spot) -> 'grab' (Tg, only AFTER landing: he takes Shicka off his back, S.sh = true at the half)
+//   -> 'aim' (stands still: no moving, no jumping; e = elevation of the throw, 0 = level, + = up; the side comes from f.face) -> 'throw' (Tt, follow-through).
+// AIM (human): joystick / drag on ATK / W S keys aim, LET GO of ATK (or tap skill II again) = throw. A bot swings toward the enemy and lets go after a moment. After d.aimMax s he throws by himself.
+// THE THROW: a straight projectile (no gravity), G.sh kind 'shicka' (art.js shot() draws it), damages the first enemy it touches. The cooldown d.cd starts at the throw; f.shGone = Shicka is off his back until that cooldown is over.
+// INTERRUPT: any hit / freeze / grab before the throw = shkEnd(f, true): Shicka stays with him (back on the backpack) and only d.cancelCd (default 0) is spent. Passive Bouncy Bear does not fire while this skill runs.
+const SJ_MIN = -1.45, SJ_MAX = 1.45;
+const shkFly = f => !!f.shk && f.shk.ph === 'jump';
+function sjGeom(f, g, d){   // flight numbers, shared by the cast and the aim preview
+  const dist = Math.abs(g.x - f.x), mid = (f.y + g.y) / 2;
+  const H = Math.min((d.height || 210) + dist * .12 + Math.max(0, g.y - f.y) * .3, mid + 140);   // (never so high that he leaves the top of the screen by much)
+  return {dist, T1:clampN((d.flight || .5) + dist / 1100, .5, .9), H:Math.max(90, H)};
+}
+function shkEnd(f, cancel){
+  const S = f.shk; if(!S) return;
+  f.shk = null;
+  if(cancel && !S.thrown && S.d.cancelCd){ const c = f.sk[S.slot].cd; c[0] = Math.max(c[0], S.d.cancelCd); }   // interrupted: Shicka stays with him (shGone was never set)
+  if(f.A && f.A.skill === 'superjump'){ f.atk = 0; f.A = f.base || f.K.basic; f.atkCd = Math.max(f.atkCd, .15); }
+  f.comboT = 0;
+}
+function shkThrow(f, S, d){
+  const sh = d.shot, ca = Math.cos(S.e), sa = Math.sin(S.e);
+  const x = f.x + f.face * (10 + 22 * ca), y = f.y - 32 - 22 * sa;
+  const A = {time:.3, cd:0, reach:0, hitFrom:0, hitTo:0, dmg:sh.dmg, kbx:sh.kbx, kby:sh.kby, stunx:sh.stunx, shake:sh.shake, hitstop:sh.hitstop, noSlash:true, step:0, skill:'superjump', hid:++HID};
+  (G.sh = G.sh || []).push({id:f.c.id, c:f.c, idx:f.idx, team:f.team, A, x, y, vx:f.face * ca * sh.speed, vy:-sa * sh.speed, r:sh.r, life:sh.life, age:0, kind:'shicka', cl:0, crit:false});   // no g = no gravity: a straight line
+  S.ph = 'throw'; S.t = 0; S.thrown = true; f.shGone = true;
+  f.sk[S.slot].cd[0] = d.cd;                                                           // the cooldown starts NOW (Shicka is gone until it ends)
+  G.rings.push({x, y, life:.22}); G.shake = Math.max(G.shake, .12);
+  for(let i = 0; i < 10; i++) G.parts.push({x, y, vx:f.face * ca * (150 + Math.random() * 380) + (Math.random() - .5) * 120, vy:-sa * (150 + Math.random() * 250) + (Math.random() - .5) * 140, life:.3, col:i % 2 ? '#ffd21f' : '#ff9a0a'});
+}
+function shkStep(f, o, dt){
+  const S = f.shk, d = S.d, i = f.in;
+  S.t += dt; f.vx = 0; f.atk = .5; f.atkCd = Math.max(f.atkCd, .2); f.aqB = 0; f.comboT = 0; f.charging = false; f.chg = 0;   // f.atk is only a "pose is on" flag: art.js poses him from f.shk
+  if(S.ph === 'crouch'){
+    if(S.t >= S.T0){
+      S.ph = 'jump'; S.t = 0; G.shake = Math.max(G.shake, .16); G.rings.push({x:f.x, y:f.y - 4, life:.28});
+      for(let n = 0; n < 12; n++) G.parts.push({x:f.x + (Math.random() - .5) * 26, y:f.y - 2, vx:(Math.random() - .5) * 420, vy:-Math.random() * 200, life:.4, col:n % 2 ? '#b9b2a8' : '#a65a2e'});
+    }
+    return;
+  }
+  if(S.ph === 'jump'){
+    const k = Math.min(1, S.t / S.T1);
+    f.x = S.x0 + (S.x1 - S.x0) * k; f.y = S.y0 + (S.y1 - S.y0) * k - S.H * 4 * k * (1 - k); f.vy = 0; f.gr = false;   // own movement along an arc (physics is paused in shkFly)
+    if(k >= 1){
+      f.x = S.x1; f.y = S.y1; S.ph = 'grab'; S.t = 0; f.vy = 0;                          // landing: normal physics (and the ground) take over again next
+      G.shake = Math.max(G.shake, .2); G.rings.push({x:f.x, y:f.y - 4, life:.3});
+      for(let n = 0; n < 14; n++) G.parts.push({x:f.x + (Math.random() - .5) * 30, y:f.y - 2, vx:(Math.random() - .5) * 460, vy:-Math.random() * 240, life:.45, col:n % 2 ? '#b9b2a8' : '#a65a2e'});
+      if(o && Math.abs(o.x - f.x) > 24) f.face = Math.sign(o.x - f.x);                  // he turns toward the enemy
+    }
+    return;
+  }
+  if(S.ph === 'grab'){                                                                  // only now does he take Shicka off his back
+    if(!S.sh && S.t >= S.Tg * .5){ S.sh = true; G.rings.push({x:f.x - f.face * 12, y:f.y - 28, life:.22}); for(let n = 0; n < 6; n++) G.parts.push({x:f.x - f.face * 12, y:f.y - 28, vx:(Math.random() - .5) * 200, vy:-40 - Math.random() * 120, life:.35, col:'#ffd21f'}); }
+    if(S.t >= S.Tg){
+      S.ph = 'aim'; S.t = 0; S.pHeld = !!i.held; S.e = 0;
+      if(o){ const dx = o.x - f.x; if(Math.abs(dx) > 24) f.face = Math.sign(dx); if(dx * f.face > 0) S.e = clampN(Math.atan2(-((o.y - o.h / 2) - (f.y - 32)), Math.abs(dx)), SJ_MIN, SJ_MAX); }   // the aim starts on the enemy, then it is yours to steer
+      S.err = (Math.random() - .5) * 2 * (G.cfg.difficulty === 'Easy' ? .12 : G.cfg.difficulty === 'Hard' ? .025 : .06);
+      S.botRel = G.t + .3 + Math.random() * .5 + (G.cfg.difficulty === 'Hard' ? 0 : .2);
+    }
+    return;
+  }
+  if(S.ph === 'aim'){
+    if(!f.gr){ shkEnd(f, true); return; }                                               // lost the floor
+    const st = (d.turn || 6) * dt;
+    if(f.pl){                                                                           // A HUMAN: drag on Skill II aims directly, keys tilt and turn
+      const v = i.skAim && i.skAim.i === S.slot ? i.skAim : null;
+      if(v){
+        if(Math.abs(v.x) > .35) f.face = Math.sign(v.x);
+        const tg = clampN(Math.atan2(-v.y, Math.max(Math.abs(v.x), .02)), SJ_MIN, SJ_MAX);
+        S.e += clampN(tg - S.e, -st, st);
+      }else if(f.skq && f.skq.i === S.slot && f.skq.drag){
+        if(Math.abs(f.skq.ax) > .35) f.face = Math.sign(f.skq.ax);
+        S.e = clampN(Math.atan2(-f.skq.ay, Math.max(Math.abs(f.skq.ax), .02)), SJ_MIN, SJ_MAX);
+      }else{
+        if(i.r - i.l) f.face = i.r - i.l;
+        S.e = clampN(S.e - (i.ay || 0) * (d.turn || 6) * .6 * dt, SJ_MIN, SJ_MAX);
+      }
+    }else if(o){                                                                        // BOT: swings toward the enemy (a little off, less off on Hard)
+      const dx = o.x - f.x; if(Math.abs(dx) > 20) f.face = Math.sign(dx);
+      const tg = clampN(Math.atan2(-((o.y - o.h / 2) - (f.y - 32)), Math.abs(dx)) + S.err, SJ_MIN, SJ_MAX);
+      S.e += clampN(tg - S.e, -st * .6, st * .6);
+    }
+    const rel = f.pl ? (f.skq && f.skq.i === S.slot) : G.t >= S.botRel;                  // release / tap Skill II = throw
+    S.pHeld = !!i.held; if(rel) S.relQ = true;                                          // (a release during the first moment is remembered, not lost)
+    if(S.t >= (d.minAim ?? .12) && (S.relQ || S.t >= (d.aimMax || 5))) shkThrow(f, S, d);
+    return;
+  }
+  if(S.ph === 'throw' && S.t >= S.Tt) shkEnd(f, false);                                 // follow-through over
+}
+function shkBack(f){   // the cooldown is over: Shicka flies back onto his backpack
+  f.shGone = false;
+  G.rings.push({x:f.x - f.face * 12, y:f.y - 28, life:.25});
+  for(let n = 0; n < 8; n++) G.parts.push({x:f.x - f.face * 12 + (Math.random() - .5) * 12, y:f.y - 28 + (Math.random() - .5) * 12, vx:(Math.random() - .5) * 160, vy:-30 - Math.random() * 110, life:.4, col:n % 2 ? '#ffd21f' : '#fff4b0'});
+}
+// ---- BEAR#012123: GIANT SHICKA (ultimate, kind 'giantshicka') ----
+// G.gs = {src, d, t, ph, cx, gy, shX, shY, iceK, cracks, iceChunks, swR, swDone, hid}
+// ph: 'emerge' -> ice block cracks open, Shicka appears (d.emerge s)
+//     'rise'   -> Shicka floats up above the arena (d.rise s)
+//     'stomp'  -> Shicka free-falls belly-down, hits ground, fires shockwave (d.stomp s)
+//     'wave'   -> shockwave spreads outward along the floor (until swR >= d.swR)
+// DODGE: the shockwave only hits grounded enemies. Jump before it reaches you to avoid.
+function giantShickaStep(dt){
+  if(!G.gs) return;
+  const Z = G.gs, d = Z.d, f = Z.src;
+  const emerge = d.emerge || 1.4, rise = d.rise || 1.0, stomp = d.stomp || 1.1;
+  Z.t += dt;
+
+  // ice chunks physics
+  Z.iceChunks.forEach(c => { c.life -= dt; c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 900 * dt; c.rot += c.vr * dt; });
+  Z.iceChunks = Z.iceChunks.filter(c => c.life > 0);
+
+  if(Z.ph === 'emerge'){
+    const k = Math.min(1, Z.t / emerge);
+    Z.iceK = k;
+    Z.shY = Z.gy - 40 - k * 90;                                      // Shicka rises out of the ice
+    if(k > .6 && Z.cracks.length < 8){
+      for(let i = Z.cracks.length; i < 8; i++){
+        const ang = Math.random() * Math.PI * 2, len = 20 + Math.random() * 50;
+        Z.cracks.push({ax:Z.cx, ay:Z.gy - 40, bx:Z.cx + Math.cos(ang) * len, by:Z.gy - 40 + Math.sin(ang) * len});
+      }
+    }
+    if(Z.t >= emerge){ Z.ph = 'rise'; Z.t = 0; G.shake = Math.max(G.shake, .15); G.pops.push({x:Z.cx, y:Z.gy - 160, txt:'RISING!', life:.7}); }
+    return;
+  }
+  if(Z.ph === 'rise'){
+    const k = Math.min(1, Z.t / rise);
+    Z.shY = (Z.gy - 130) - k * (H * .55);                           // floats up and out of the top
+    if(Z.t >= rise){ Z.ph = 'stomp'; Z.t = 0; Z.shY = -H * .3; G.shake = Math.max(G.shake, .1); G.pops.push({x:Z.cx, y:H * .15, txt:'GIANT BELLY STOMP!', life:.9}); }
+    return;
+  }
+  if(Z.ph === 'stomp'){
+    Z.shY += (1800 + Z.t * 2200) * dt;                              // accelerates downward
+    if(Z.shY >= Z.gy - 50){
+      Z.shY = Z.gy - 50; Z.ph = 'wave'; Z.t = 0;
+      G.shake = Math.max(G.shake, .9); G.hs = Math.max(G.hs || 0, .18);
+      G.rings.push({x:Z.cx, y:Z.gy - 4, life:.4}); G.rings.push({x:Z.cx, y:Z.gy - 4, life:.6});
+      for(let i = 0; i < 28; i++) G.parts.push({x:Z.cx + (Math.random() - .5) * 60, y:Z.gy, vx:(Math.random() - .5) * 900, vy:-Math.random() * 600, life:.6, col:i % 3 === 0 ? '#ffd21f' : i % 3 === 1 ? '#4a8fd8' : '#c2f0ff'});
+      G.waves.push({x:Z.cx, y:Z.gy - 10, r:d.swR || 480, life:.7, max:.7, col:'#ffd21f', fill:'#a65a2e'});
+      G.pops.push({x:Z.cx, y:Z.gy - 60, txt:'SHOCKWAVE!', life:1.0});
+    }
+    return;
+  }
+  if(Z.ph === 'wave'){
+    const spd = d.swSpd || 520;
+    Z.swR += spd * dt;
+    if(!Z.swDone && Z.swR > 0){
+      // Hits grounded enemies inside the growing ring band (not already hit this wave, not airborne)
+      foesOf(f).forEach(e => {
+        if(e.dead || e.inv > 0 || e.capturedBy != null) return;
+        const ex = Math.abs(e.x - Z.cx);
+        if(!e.gr) return;                                              // DODGE: airborne = safe
+        if(ex <= Z.swR && !e.gsHit){
+          e.gsHit = true;
+          const A = skillA(d, {hid:Z.hid, noSlash:true, dmg:d.dmg || 2.4, kbx:d.kbx || 1.2, kby:d.kby || 1.6, stunx:d.stunx || 1.4, shake:1.6, hitstop:.12});
+          hurt(e, {c:f.c, A, face:Math.sign(e.x - Z.cx) || f.face, src:f});
+        }
+      });
+    }
+    if(Z.swR >= (d.swR || 480) && !Z.swDone){
+      Z.swDone = true;
+      G.f.forEach(e => { e.gsHit = false; });                         // reset hit flag
+    }
+    if(Z.swDone && Z.t > (d.linger || .6)) G.gs = null;              // done, clean up
+    return;
+  }
+}
+function drawGiantShicka(){
+  if(!G.gs) return;
+  const Z = G.gs;
+  cx.save();
+
+  const Y='#ffd21f', YD='#e3a800', BL='#4a8fd8', BK='#0a0a0a', BK2='#ff9a0a';
+  const blockW=100, blockH=145, bx=Z.cx-blockW/2, by=Z.gy-blockH;
+  const ik=Z.iceK;
+
+  // ============================================================
+  // WARNING SHADOW during rise & stomp phases
+  // ============================================================
+  if(Z.ph==='rise'||Z.ph==='stomp'){
+    const prog=(Z.ph==='stomp')?Math.min(1,Z.t/0.5):0.3+0.7*(Z.t/0.4||0);
+    const sw=120+80*prog, sh=14+10*prog;
+    const grd=cx.createRadialGradient(Z.cx,Z.gy,0,Z.cx,Z.gy,sw/2);
+    grd.addColorStop(0,'rgba(0,0,0,'+(0.45*prog)+')');
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    cx.save(); cx.scale(1,sh/sw); cx.translate(0,Z.gy*(1-sw/sh));
+    cx.fillStyle=grd; cx.beginPath(); cx.arc(Z.cx,Z.gy,sw/2,0,Math.PI*2); cx.fill();
+    cx.restore();
+  }
+
+  // ============================================================
+  // ICE BLOCK — layered, glowing, with Shicka silhouette inside
+  // ============================================================
+  if(Z.ph==='emerge'||ik>0){
+    const pha=(Z.ph==='emerge')?Math.max(0,1-Z.t*1.3)*ik:ik;
+    cx.save();
+    cx.globalAlpha=pha;
+
+    // inner glow (pulsing gold — Shicka's power building)
+    const pulse=0.5+0.5*Math.sin(G.t*9);
+    const grd=cx.createRadialGradient(Z.cx,by+blockH*0.55,10,Z.cx,by+blockH*0.55,blockH*0.65);
+    grd.addColorStop(0,'rgba(255,220,50,'+(0.5+0.3*pulse)+')');
+    grd.addColorStop(0.5,'rgba(180,235,255,0.25)');
+    grd.addColorStop(1,'rgba(180,235,255,0)');
+    cx.fillStyle=grd; cx.fillRect(bx-20,by-10,blockW+40,blockH+20);
+
+    // Shicka silhouette inside the ice (visible while ice is still up)
+    if(pha>0.25){
+      cx.save();
+      const sc=4.8, sxc=Z.cx, syc=Z.gy;
+      cx.translate(sxc,syc); cx.scale(sc,sc);
+      cx.globalAlpha=Math.min(0.45*pha, 0.45);
+      cx.fillStyle='rgba(255,200,30,0.7)';
+      // silhouette blobs (front-view, rough fill only)
+      _rrPath(cx,-2.9,5.0,2.4,3.2,1.0); cx.fill(); _rrPath(cx,.5,5.0,2.4,3.2,1.0); cx.fill(); // legs
+      _rrPath(cx,-3.2,-.8,6.4,6.4,1.8); cx.fill(); // body
+      _rrPath(cx,-5.8,-.1,3.0,2.2,1.0); cx.fill(); _rrPath(cx,2.8,-.1,3.0,2.2,1.0); cx.fill(); // arms
+      _rrPath(cx,-4.3,-8.2,8.6,7.8,2.2); cx.fill(); // head
+      _rrPath(cx,-3.8,-10.5,2.9,3.1,1.0); cx.fill(); _rrPath(cx,1.1,-10.5,2.9,3.1,1.0); cx.fill(); // ears
+      cx.restore();
+    }
+
+    cx.globalAlpha=pha;
+
+    // back ice panel (darker, slight offset)
+    cx.fillStyle='rgba(140,220,245,0.55)'; cx.strokeStyle='#4a8fd8'; cx.lineWidth=1.5;
+    cx.beginPath(); cx.rect(bx-6,by+6,blockW+12,blockH); cx.fill(); cx.stroke();
+
+    // mid ice panel
+    cx.fillStyle='rgba(180,238,255,0.65)'; cx.strokeStyle='#5bbae8'; cx.lineWidth=2;
+    cx.beginPath(); cx.rect(bx-3,by+3,blockW+6,blockH); cx.fill(); cx.stroke();
+
+    // front ice panel (lightest)
+    cx.fillStyle='rgba(220,248,255,0.75)'; cx.strokeStyle='#8ad4f0'; cx.lineWidth=2.5;
+    cx.beginPath(); cx.rect(bx,by,blockW,blockH); cx.fill(); cx.stroke();
+
+    // starburst cracks radiating from Shicka's center inside the block
+    if(Z.cracks.length){
+      cx.globalAlpha=Math.min(0.9,pha*1.2);
+      cx.strokeStyle='#ffffff'; cx.lineWidth=2.2; cx.setLineDash([]);
+      Z.cracks.forEach(cr=>{
+        cx.beginPath(); cx.moveTo(cr.ax,cr.ay); cx.lineTo(cr.bx,cr.by); cx.stroke();
+        // secondary hairline crack branching off
+        const mx=(cr.ax+cr.bx)/2, my=(cr.ay+cr.by)/2;
+        const ang=Math.atan2(cr.by-cr.ay,cr.bx-cr.ax)+0.5;
+        const brLen=18+cr.r2*22;
+        cx.lineWidth=1; cx.strokeStyle='rgba(255,255,255,0.65)';
+        cx.beginPath(); cx.moveTo(mx,my); cx.lineTo(mx+Math.cos(ang)*brLen,my+Math.sin(ang)*brLen); cx.stroke();
+      });
+      cx.lineWidth=1; cx.strokeStyle='rgba(255,255,255,0.4)'; cx.setLineDash([2,5]);
+      Z.cracks.forEach(cr=>{
+        cx.beginPath(); cx.moveTo(cr.ax,cr.ay); cx.lineTo((cr.ax+cr.bx)/2,(cr.ay+cr.by)/2); cx.stroke();
+      });
+      cx.setLineDash([]);
+    }
+
+    // shiny highlight strip on ice
+    const hg=cx.createLinearGradient(bx,by,bx+blockW*0.4,by+blockH*0.3);
+    hg.addColorStop(0,'rgba(255,255,255,0.35)'); hg.addColorStop(1,'rgba(255,255,255,0)');
+    cx.fillStyle=hg; cx.globalAlpha=pha*0.8;
+    cx.beginPath(); cx.rect(bx,by,blockW*0.38,blockH); cx.fill();
+
+    cx.restore();
+  }
+
+  // ============================================================
+  // ICE CHUNKS
+  // ============================================================
+  Z.iceChunks.forEach(c=>{
+    if(c.life<=0) return;
+    cx.save(); cx.translate(c.x,c.y); cx.rotate(c.rot);
+    cx.globalAlpha=Math.min(1,c.life*2.5);
+    // polygon shard shape (larger, irregular)
+    cx.beginPath();
+    const hw=c.w/2, hh=c.w*0.5;
+    cx.moveTo(-hw,-hh*0.5); cx.lineTo(hw*0.5,-hh); cx.lineTo(hw,hh*0.3);
+    cx.lineTo(hw*0.3,hh); cx.lineTo(-hw*0.7,hh*0.6); cx.closePath();
+    const sg=cx.createLinearGradient(-hw,-hh,hw,hh);
+    sg.addColorStop(0,'#e8f8ff'); sg.addColorStop(1,'#9dd8f0');
+    cx.fillStyle=sg; cx.fill();
+    cx.strokeStyle='#4a8fd8'; cx.lineWidth=1.4; cx.stroke();
+    // inner shine
+    cx.globalAlpha*=0.5; cx.fillStyle='rgba(255,255,255,0.6)';
+    cx.beginPath(); cx.arc(-hw*0.2,-hh*0.2,c.w*0.15,0,Math.PI*2); cx.fill();
+    cx.restore();
+  });
+
+  // ============================================================
+  // GIANT SHICKA BODY — FRONT VIEW
+  // ============================================================
+  const sc=4.8;
+  cx.save();
+  cx.translate(Z.shX,Z.shY);
+  // stomp phase: slight forward lean (not full 90° rotation)
+  if(Z.ph==='stomp'){ const lean=0.18*Math.sign((Z.src?Z.src.x:Z.cx)-Z.cx||1); cx.rotate(lean); }
+  cx.scale(sc,sc);
+
+  // body shadow
+  cx.save(); cx.globalAlpha=0.18; cx.fillStyle='#2a140a';
+  _rrPath(cx,-3.5,.0,7.0,8.0,2.0); cx.fill(); cx.restore();
+
+  // legs (front view — two legs visible)
+  _box(cx,-2.9,5.0,2.4,3.2,1.0,YD,1.1);
+  _box(cx,.5,5.0,2.4,3.2,1.0,YD,1.1);
+
+  // body
+  _box(cx,-3.2,-.8,6.4,6.4,1.8,Y,1.3);
+
+  // blue belly patch
+  _box(cx,-1.8,.4,3.6,3.8,1.1,BL,0);
+
+  // arms (both sides)
+  _box(cx,-5.8,-.1,3.0,2.2,1.0,Y,1.2);
+  _box(cx,2.8,-.1,3.0,2.2,1.0,Y,1.2);
+
+  // ears (both)
+  _box(cx,-3.8,-10.5,2.9,3.1,1.0,Y,1.2);
+  _box(cx,1.1,-10.5,2.9,3.1,1.0,Y,1.2);
+
+  // head
+  _box(cx,-4.3,-8.2,8.6,7.8,2.2,Y,1.4);
+
+  // eyes (black rounded)
+  cx.fillStyle=BK;
+  _rrPath(cx,-1.9,-6.0,1.6,2.6,.6); cx.fill();
+  _rrPath(cx,1.1,-6.0,1.6,2.6,.6); cx.fill();
+
+  // eye shine
+  cx.fillStyle='rgba(255,255,255,0.7)';
+  cx.beginPath(); cx.arc(-1.4,-5.5,.35,0,Math.PI*2); cx.fill();
+  cx.beginPath(); cx.arc(1.6,-5.5,.35,0,Math.PI*2); cx.fill();
+
+  // muzzle
+  _box(cx,-1.0,-3.2,2.8,2.0,.8,BK2,1.0);
+
+  // nose
+  cx.fillStyle=BK; _rrPath(cx,-.2,-3.0,1.3,1.0,.4); cx.fill();
+
+  cx.restore();
+
+  // ============================================================
+  // GROUND CRACKS (persist after stomp, radiate from impact)
+  // ============================================================
+  if((Z.ph==='wave'||Z.ph==='stomp')&&Z.groundCracks){
+    cx.save(); cx.strokeStyle='#2a140a'; cx.lineWidth=3; cx.globalAlpha=0.65;
+    Z.groundCracks.forEach(cr=>{
+      cx.beginPath(); cx.moveTo(Z.cx,Z.gy);
+      cx.lineTo(Z.cx+Math.cos(cr.ang)*cr.len,Z.gy+Math.sin(cr.ang)*cr.len*0.15);
+      cx.stroke();
+      // secondary branch
+      cx.lineWidth=1.5; cx.globalAlpha=0.4;
+      const bx2=Z.cx+Math.cos(cr.ang)*cr.len*0.6;
+      const by2=Z.gy+Math.sin(cr.ang)*cr.len*0.09;
+      cx.beginPath(); cx.moveTo(bx2,by2);
+      cx.lineTo(bx2+Math.cos(cr.ang+0.4)*cr.len*0.35,by2+Math.sin(cr.ang+0.4)*cr.len*0.05);
+      cx.stroke();
+      cx.lineWidth=3; cx.globalAlpha=0.65;
+    });
+    cx.restore();
+  }
+
+  // ============================================================
+  // SHOCKWAVE (wave phase) — multi-ring jagged impressive version
+  // ============================================================
+  if(Z.ph==='wave'&&Z.swR>0){
+    const gy=Z.gy, R=Z.swR;
+    const pu=0.5+0.5*Math.sin(G.t*20);
+    cx.save();
+
+    // === trailing dust haze ===
+    for(let s=-1;s<=1;s+=2){
+      const ex=Z.cx+s*R;
+      const hgrd=cx.createLinearGradient(Z.cx,gy,ex,gy);
+      hgrd.addColorStop(0,'rgba(166,100,46,0)');
+      hgrd.addColorStop(0.6,'rgba(166,100,46,0.18)');
+      hgrd.addColorStop(1,'rgba(255,180,30,0.08)');
+      cx.fillStyle=hgrd; cx.globalAlpha=0.7;
+      cx.fillRect(Math.min(Z.cx,ex),gy-10,R,18);
+    }
+
+    // === jagged ground ripple (3 rings) ===
+    const rings=[
+      {off:0,  col:'rgba(255,210,31,0.95)', lw:4+3*pu, blur:16},
+      {off:12, col:'rgba(255,165,0,0.55)',  lw:5,       blur:8},
+      {off:26, col:'rgba(166,90,46,0.3)',   lw:6,       blur:4},
+    ];
+    rings.forEach((rg,ri)=>{
+      const r2=Math.max(0,R-rg.off);
+      if(r2<=0) return;
+      cx.globalAlpha=1;
+      cx.strokeStyle=rg.col; cx.lineWidth=rg.lw;
+      cx.shadowColor=rg.col; cx.shadowBlur=rg.blur;
+      // jagged wave along ground: draw as polyline with sine offset
+      const steps=Math.ceil(r2*2/4);
+      for(let s=-1;s<=1;s+=2){
+        cx.beginPath();
+        for(let i=0;i<=steps;i++){
+          const px=Z.cx+s*(i/steps)*r2;
+          const jag=(ri===0)?(Math.sin(i*0.9+G.t*22)*2.5*(i/steps)):(Math.sin(i*0.6+G.t*15)*1.5*(i/steps));
+          if(i===0) cx.moveTo(px,gy+jag); else cx.lineTo(px,gy+jag);
+        }
+        cx.stroke();
+      }
+    });
+    cx.shadowBlur=0;
+
+    // === leading edge burst dots ===
+    for(const s of[-1,1]){
+      const ex=Z.cx+s*R;
+      // outer glow circle
+      const rg2=cx.createRadialGradient(ex,gy,0,ex,gy,22+8*pu);
+      rg2.addColorStop(0,'rgba(255,230,80,'+(0.9+0.1*pu)+')');
+      rg2.addColorStop(0.4,'rgba(255,180,20,0.7)');
+      rg2.addColorStop(1,'rgba(255,120,0,0)');
+      cx.globalAlpha=1; cx.fillStyle=rg2;
+      cx.beginPath(); cx.arc(ex,gy,22+8*pu,0,Math.PI*2); cx.fill();
+      // solid core dot
+      cx.shadowColor='#fff'; cx.shadowBlur=10;
+      cx.fillStyle='#ffffff';
+      cx.beginPath(); cx.arc(ex,gy,5+2*pu,0,Math.PI*2); cx.fill();
+      cx.shadowBlur=0;
+    }
+
+    // === shockwave ground ellipse ring (flattened arc along floor) ===
+    cx.globalAlpha=0.35+0.2*pu;
+    cx.strokeStyle='rgba(255,210,31,0.8)'; cx.lineWidth=3+2*pu;
+    cx.shadowColor='#ffd21f'; cx.shadowBlur=10;
+    cx.beginPath(); cx.ellipse(Z.cx,gy,R,Math.min(R*0.09,20),0,Math.PI,Math.PI*2);
+    cx.stroke(); cx.shadowBlur=0;
+
+    cx.restore();
+  }
+
+  cx.restore();
+}
+// tiny box + rrPath helpers used only by drawGiantShicka (avoids polluting canvas state from character art)
+function _rrPath(c, x, y, w, h, r){ r = Math.min(r, w/2, h/2); c.beginPath(); c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r); c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r); c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r); c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r); c.closePath(); }
+function _box(c, x, y, w, h, r, fill, lw){ _rrPath(c,x,y,w,h,r); c.fillStyle=fill; c.fill(); if(lw){ c.lineJoin='round'; c.lineWidth=lw; c.strokeStyle='#2a140a'; c.stroke(); } }
+function bearAirStep(f, wasG){
+  const P = f.K.passive; if(!P || P.kind !== 'bouncy') return;
+  if(f.shk){ f.apex = f.y; return; }                                                // Super Jump & Shicka Toss: the landing is part of the skill (no shockwave, no bounce)
+  if(G.gs && G.gs.src === f){ f.apex = f.y; return; }                               // Giant Shicka ultimate running: ignore Bear's own landing for Bouncy Bear
+  if(!f.gr){ f.apex = Math.min(f.apex ?? f.y, f.y); return; }                      // in the air: remember the highest point
+  const dist = f.y - (f.apex ?? f.y); f.apex = f.y;
+  if(wasG) return;                                                                  // was already standing: not a landing
+  if(f.bst){                                                                        // BELLY STOMP lands: the bigger shockwave + bounce, then locked until he jumps again
+    const d = f.K.hold; bearWave(f, d, dist); bearBounce(f, d, dist);
+    f.bst = null; f.bsLock = true; f.bsLandT = G.t; f.atkCd = Math.max(f.atkCd, .12);
+  }else if(dist >= P.minFall && f.capturedBy == null && !f.fakeFall && !f.ls){      // BOUNCY BEAR
+    bearWave(f, P, dist); bearBounce(f, P, dist);
+  }
+}
+function stompGroundBelow(f){ return G.P.some(p => f.x + f.w / 2 > p.x && f.x - f.w / 2 < p.x + p.w && p.y >= f.y - 2); }
+function stompStep(f, dt){
+  const d = f.K.hold, bad = f.stun > 0 || f.frz > 0 || f.rec > 0 || f.capturedBy != null || f.onsl || f.slaughter || f.rush || f.hk || f.shd || f.uhand || f.ls || f.pq || f.shk || (f.mp && f.mp.ph === 'cast') || f.descent || f.sc || f.fakeFall;
+  if(f.bst){
+    if(bad || f.gr){ f.bst = null; return; }                                        // hit / caught: the dive is over
+    const B = f.bst; B.t += dt; f.atk = 0; f.charging = false;
+    const A = {time:.3, cd:0, reach:0, hitFrom:0, hitTo:0, dmg:d.hitDmg, kbx:d.hitKbx, kby:d.hitKby, stunx:1, hitstop:.05, noSlash:true, step:0, hid:B.hid || (B.hid = ++HID)};
+    foesOf(f).forEach(e => {                                                        // damages enemies during the descent (each one once per dive)
+      if(B.hit.includes(e.idx) || e.inv > 0) return;
+      if(Math.abs(e.x - f.x) < f.w / 2 + e.w / 2 + 10 && e.y - e.h < f.y + 8 && e.y > f.y - f.h){ B.hit.push(e.idx); hurt(e, {c:f.c, A, face:Math.sign(e.x - f.x) || f.face, src:f}); }
+    });
+    return;
+  }
+  if(f.aq && !f.gr && !f.bsLock && !bad && stompGroundBelow(f)){                  // press ATK in the air = instant dive
+    f.bst = {t:0, hit:[], acc:d.acc, vmax:d.vmax}; f.vy = Math.max(f.vy, d.startVy); f.vx *= .4;
+    f.aq = false; f.aqB = 0; f.comboT = 0; f.atk = 0; f.charging = false; f.chg = 0;
+    G.pops.push({x:f.x, y:f.y - f.h - 8, txt:'BELLY STOMP', life:.5});
+  }
 }
 
 // Character-aware bot brain. Difficulty changes reaction/aggression; skill decisions read each fighter's own skills.js data.
@@ -2896,6 +3495,7 @@ function think(f, o, dt){
     if(f.rit) i.held = false;                                                                      // already active: no need to hold
     else i.held = f.gr && f.atk <= 0 && !(f.ritCd > 0) && !f.ritLock && ax < hd.radius * .85 && ay < 130 && Math.random() < (G.cfg.difficulty === 'Hard' ? .4 : .25);
   }
+  if(f.K.hold && f.K.hold.kind === 'stomp' && !f.gr && !f.bst && !f.bsLock && f.vy > -60 && dy > 25 && ax < 110) f.aq = true;   // Belly Stomp (Bear): the bot dives when it is falling and the enemy is below it
   // Estimate a useful fighting distance from this character's actual kit.
   const defs = [...(f.K.skills || []), f.K.ultimate].filter(Boolean);
   const ranged = !f.fc && defs.some(d => d.aim && d.kind !== 'shadowhook' && (d.range || d.speed * (d.life || 0)) > 150);
@@ -3056,6 +3656,13 @@ function think(f, o, dt){
       case 'rush':
         if(f.gr && verticalOK && ax >= 105 && ax <= (d.dist || 0) * .88) score = 72;
         break;
+      case 'superjump': {   // Bear II: jump to a spot on his own side of the enemy (further away when the enemy is close), then aim and throw Shicka
+        const R = d.range || 460, dE = Math.sign(dx) || f.face, tx = clampN(o.x - dE * (ax < 200 ? 330 : 250), f.x - R, f.x + R), adx = Math.abs(tx - f.x);
+        if(f.gr && !f.shk && adx >= 90 && ay < 170){ const sx = Math.sign(tx - f.x) || f.face, mm = clampN(adx / R, .1, 1); if(CAN.superjump(f, o, d, sx, 0, mm)){ score = 61; aimOv = {ax:sx, ay:0, m:mm}; } }
+        break; }
+      case 'goo':   // Bear I: coat himself when the enemy is within a few steps and he is not coated yet
+        if(!f.goo && ax < 320) score = 66;
+        break;
       case 'stench':
         if(f.stench) score = (Math.hypot(dx, dy) > d.radius * 1.4 || f.hp < f.max * .3) ? 90 : 0;   // on: turn it off when the enemy is far or he is low on HP
         else if(Math.hypot(dx, dy) <= d.radius * .9 && f.hp > f.max * .5) score = 70;   // off: turn it on when the enemy is close and he is healthy
@@ -3105,15 +3712,17 @@ function update(dt){
     if(Ctl.atk){ a.aq = true; Ctl.atk = false; }
     a.in.held = Ctl.held;
     a.in.aim = Ctl.atkV || (Math.hypot(Ctl.sx, Ctl.sy) > .4 ? {x:Ctl.sx, y:Ctl.sy} : null); a.in.ay = Ctl.dn - Ctl.up;   // aiming a held attack (Deadeye Sniper): drag ATK or the stick, or W / S
+    a.in.skAim = Ctl.aim && Ctl.aim.drag && !Ctl.aim.cancel ? {i:Ctl.aim.i, x:Ctl.aim.ax, y:Ctl.aim.ay} : null;
     [0, 1, 2].forEach(i => { if(Ctl.sk[i]){ a.skq = {i, ...Ctl.sk[i]}; Ctl.sk[i] = null; } });   // skill casts from the buttons / keys 1 2 3
   }else{ Ctl.jump = Ctl.drop = Ctl.atk = false; [0, 1, 2].forEach(i => Ctl.sk[i] = null); }    // you are out: your allies keep fighting
   const R = G.f.find(f => f.remote);                                                             // online: the guest's inputs come off the network
-  if(R){ const p = Net.take(); if(!R.dead){ R.in.l = p.l; R.in.r = p.r; R.in.held = p.held; R.in.aim = p.aim; R.in.ay = p.ay; if(p.jq) R.jq = true; if(p.dq) R.dq = true; if(p.aq) R.aq = true; if(p.skq) R.skq = p.skq; } }
+  if(R){ const p = Net.take(); if(!R.dead){ R.in.l = p.l; R.in.r = p.r; R.in.held = p.held; R.in.aim = p.aim; R.in.skAim = p.skAim; R.in.ay = p.ay; if(p.jq) R.jq = true; if(p.dq) R.dq = true; if(p.aq) R.aq = true; if(p.skq) R.skq = p.skq; } }
   const live = G.f.filter(f => !f.dead);
   live.forEach(f => { f.cur = foeOf(f); });                                                      // everyone picks the enemy they are fighting
   live.forEach(f => { if(f.idx !== 0 && !f.remote && f.cur && (G.mode === 'ai' || f.team === 0)) think(f, f.cur, dt); });   // bots: every fighter but you (sparring: only your allies, the dummies stand still)
   live.forEach(f => { if(f.cur){ const sv = f.scr ? scrApply(f) : null; stepF(f, f.cur, dt); if(sv) scrRestore(f, sv); } });   // scr = System Override: scrambled controls
   stepPuddles(dt); stepVerdicts(dt); stepHands(dt); stepSkeletons(dt); stepIceZones(dt); stepErrZones(dt); stepSysOv(dt);
+  giantShickaStep(dt);
   stepFx(dt);
   updateShots(dt);
   G.shake = Math.max(0, G.shake - dt);
@@ -3282,6 +3891,17 @@ function drawFrozen(f){   // the ice block around a frozen fighter (a little mor
   cx.restore();
 }
 
+// GOO OUTLINE: the fighter is drawn ONCE into a small hidden canvas, turned into a flat-colour silhouette, and that silhouette is stamped 8 times around the real body (2.6 px apart). Cheap (no canvas filter) and it follows the real shape.
+let gooCv = null;
+function gooOutline(f, col){
+  const W2 = 280, H2 = 260, OX = 140, OY = 210;
+  if(!gooCv){ gooCv = document.createElement('canvas'); gooCv.width = W2; gooCv.height = H2; gooCv.g = gooCv.getContext('2d'); }
+  const g = gooCv.g;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.clearRect(0, 0, W2, H2);
+  g.translate(OX - f.x, OY - f.y); Body.draw(g, f, G.t);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = col; g.fillRect(0, 0, W2, H2); g.globalCompositeOperation = 'source-over';
+  for(let i = 0; i < 8; i++){ const a = i * Math.PI / 4; cx.drawImage(gooCv, f.x - OX + Math.cos(a) * 2.6, f.y - OY + Math.sin(a) * 2.6); }
+}
 function drawF(f){
   if(f.descent && f.descent.ph === 'vanish') return; // Nethros vanished into the heavens
   const x = f.x, y = f.y;
@@ -3289,7 +3909,10 @@ function drawF(f){
   if(f.inv > 0 && Math.floor(G.t * 20) % 2) cx.globalAlpha = .45;
   if(f.capturedBy != null){ cx.translate(x, y - f.h / 2); cx.rotate(f.capRot ?? Math.PI); cx.translate(-x, -(y - f.h / 2)); }
   const fcArt = f.fc && Characters.artOf(f.c.id).fcDraw;   // Final Curtain: the body on screen is the beast (+ the floating dancer), art.js draws both
+  const gooK = f.goo ? f.goo.kind : f.gooE ? f.gooE.kind : null;   // GOO: a green / purple outline that follows the SHAPE of the body (on Bear while he carries it, on an enemy it was passed to)
+  if(gooK && !f.ls && !fcArt) gooOutline(f, GOO_COL[gooK]);          // (drawn first = behind the body)
   if(f.ls) drawBall(f); else if(fcArt) fcArt(cx, f, G.t); else Body.draw(cx, f, G.t);   // default ragdoll body (body.js).
+  if(gooK && (f.ls || fcArt)){ cx.strokeStyle = GOO_COL[gooK]; cx.lineWidth = 3; rr(x - f.w / 2 - 6, y - f.h - 6, f.w + 12, f.h + 10, 12); cx.stroke(); }   // (ball / beast forms: a plain frame)
   if(f.frz > 0) drawFrozen(f);   // frozen: ice block around the fighter Later: if(f.c.img) draw the sprite instead.
   if(f.bar > 0){ cx.fillStyle = 'rgba(127,208,255,.14)'; cx.strokeStyle = 'rgba(127,208,255,.85)'; cx.lineWidth = 2; cx.beginPath(); cx.ellipse(x, y - f.h / 2, 24, f.h / 2 + 8, 0, 0, 7); cx.fill(); cx.stroke(); }   // barrier
   if(f.atk > 0 && f.atk < f.A.time - .04 && !f.A.noSlash){
@@ -3572,17 +4195,17 @@ function draw(){
     if(a.ground){ cx.strokeStyle = 'rgba(255,170,60,.95)'; cx.fillStyle = 'rgba(255,106,26,' + (.2 * pu) + ')'; cx.lineWidth = 2.5; cx.beginPath(); cx.ellipse(a.tx, a.ty - 2, ad.radius, ad.radius * .28, 0, 0, 7); cx.fill(); cx.stroke(); cx.beginPath(); cx.arc(a.tx, a.ty - 2, 4, 0, 7); cx.fillStyle = 'rgba(255,200,120,.95)'; cx.fill(); }
     else{ cx.strokeStyle = 'rgba(190,190,200,.8)'; cx.beginPath(); cx.moveTo(a.tx - 9, a.ty - 9); cx.lineTo(a.tx + 9, a.ty + 9); cx.moveTo(a.tx + 9, a.ty - 9); cx.lineTo(a.tx - 9, a.ty + 9); cx.stroke(); }
     cx.restore();
-  }else if(ad && ad.kind === 'paintquake' && !am.cancel){   // Paintquake: dotted HOP ARC (same maths as paintquake() / pqStep) + paint circle where she lands (grey X = no ground there)
-    const o2 = foeOf(af), ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0, mg = am.drag ? am.m : null, g = groundAim(af, o2, ad, ax, ay, mg), pu = .6 + .4 * Math.sin(G.t * 10);
+  }else if(ad && (ad.kind === 'paintquake' || (ad.kind === 'superjump' && !af.shk)) && !am.cancel){   // Paintquake / Super Jump: dotted HOP ARC (not shown while already in Bear's Shicka aim)
+    const o2 = foeOf(af), ax = am.drag ? am.ax : af.face, ay = am.drag ? am.ay : 0, mg = am.drag ? am.m : null, g = groundAim(af, o2, ad, ax, ay, mg), pu = .6 + .4 * Math.sin(G.t * 10), sj = ad.kind === 'superjump', c1 = sj ? 'rgba(255,170,60,.95)' : 'rgba(255,95,162,.95)';
     cx.save(); cx.lineWidth = 3; cx.lineCap = 'round';
     if(g){
-      const dist = Math.abs(g.x - af.x), H = 70 + dist * .15 + Math.max(0, g.y - af.y) * .3;
-      cx.strokeStyle = 'rgba(255,95,162,.95)'; cx.setLineDash([3, 8]); cx.beginPath();
+      const dist = Math.abs(g.x - af.x), H = sj ? sjGeom(af, g, ad).H : 70 + dist * .15 + Math.max(0, g.y - af.y) * .3;
+      cx.strokeStyle = c1; cx.setLineDash([3, 8]); cx.beginPath();
       for(let i = 0; i <= 24; i++){ const k = i / 24, px = af.x + (g.x - af.x) * k, py = af.y + (g.y - af.y) * k - H * 4 * k * (1 - k); i ? cx.lineTo(px, py) : cx.moveTo(px, py); }
       cx.stroke(); cx.setLineDash([]);
-      cx.fillStyle = 'rgba(255,210,63,' + (.22 * pu) + ')'; cx.strokeStyle = 'rgba(255,95,162,.95)'; cx.lineWidth = 2.5;
-      cx.beginPath(); cx.ellipse(g.x, g.y - 2, ad.radius, ad.radius * .28, 0, 0, 7); cx.fill(); cx.stroke();
-      cx.beginPath(); cx.arc(g.x, g.y - 2, 4, 0, 7); cx.fillStyle = 'rgba(47,208,196,.95)'; cx.fill();
+      cx.fillStyle = 'rgba(255,210,63,' + (.22 * pu) + ')'; cx.strokeStyle = c1; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.ellipse(g.x, g.y - 2, ad.radius || 24, (ad.radius || 24) * .28, 0, 0, 7); cx.fill(); cx.stroke();
+      cx.beginPath(); cx.arc(g.x, g.y - 2, 4, 0, 7); cx.fillStyle = sj ? 'rgba(255,210,31,.95)' : 'rgba(47,208,196,.95)'; cx.fill();
     }else{
       const R = ad.range || 430, bx = af.x + ax * (mg == null ? .8 : Math.max(.25, mg)) * R, by = af.y - af.h / 2;
       cx.strokeStyle = 'rgba(190,190,200,.8)'; cx.beginPath(); cx.moveTo(bx - 9, by - 9); cx.lineTo(bx + 9, by + 9); cx.moveTo(bx + 9, by - 9); cx.lineTo(bx - 9, by + 9); cx.stroke();
@@ -3595,7 +4218,7 @@ function draw(){
     cx.beginPath(); cx.moveTo(af.x, y0); cx.lineTo(af.x + dx * len, y0 + dy * len); cx.stroke(); cx.setLineDash([]);
     cx.beginPath(); cx.arc(af.x + dx * len, y0 + dy * len, 6, 0, 7); cx.fill(); cx.restore();
   }
-  drawVerdicts(); drawHands(); drawDescentOmen(); drawSkeletons(); drawIceZones(); drawErrZones(); drawSovFx(); drawPaintStacks(); drawIceAgeFront(); drawSkyZones(); drawStormClouds(); drawBolts();
+  drawVerdicts(); drawHands(); drawDescentOmen(); drawSkeletons(); drawIceZones(); drawErrZones(); drawSovFx(); drawPaintStacks(); drawIceAgeFront(); drawSkyZones(); drawStormClouds(); drawBolts(); drawGiantShicka();
   G.waves.forEach(q => { const k = 1 - q.life / q.max; cx.globalAlpha = (1 - k) * .85; cx.strokeStyle = q.col || '#ffb347'; cx.lineWidth = 2 + 9 * (1 - k);
     cx.beginPath(); cx.arc(q.x, q.y, q.r * k, 0, 7); cx.stroke(); cx.globalAlpha = (1 - k) * .16; cx.fillStyle = q.fill || '#ff8a2a'; cx.fill(); });   // Total Extinction shockwave
   cx.globalAlpha = 1;
@@ -3650,6 +4273,8 @@ function syncBtns(){
       if(left.length) frac = Math.min(1, Math.min(...left) / tot);   // the charge that comes back first
       n = cd ? Math.ceil(Math.min(...left)) : (d.charges > 1 ? ready : '');
       if(d.toggle && f.stench) n = 'ON';
+      if(d.kind === 'goo' && f.goo){ n = f.goo.kind === 'green' ? 'G' : 'P'; cd = false; frac = 0; }   // coated: shows which goo (G / P) until it is passed on
+      if(d.kind === 'superjump' && f.shk){ n = f.shk.ph === 'aim' ? 'AIM' : ''; cd = false; frac = 0; }   // Bear II is running: AIM while he holds Shicka
       if(d.kind === 'replicate' && f.shadows.length){ n = f.shadows.length; cd = false; frac = 0; }   // shadows left (the button teleports)   // a toggle skill that is switched on
     }
     if(b.dataset.n !== String(n)) b.dataset.n = n;
@@ -3701,17 +4326,17 @@ addEventListener('keydown', e => {
 
 // ---- SKILL INFO: the (i) button above the ultimate opens a side panel (overlay, not a modal). The match is frozen while it is open and continues when you close it.
 //      Each row: name, type, cooldown, damage (shown for THIS opponent: same formula as a hit, ~ = rounded) and the text. Text = `desc` in the character's skills.js (optional), `type` overrides the type label.
-const KIND_TYPE = {dimimpale:'Ground target - Mirror + Teleport', shatteredgravity:'Ground target - Pull zone', grandentrance:'Ground target - Stomp', nostrings:'Aimed - piercing line', wintergrasp:'Ground target - Launch + Frost', crystalcoffin:'Ground target - Immobilize', iceage:'Arena - Ultimate', shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', sniper:'Held key - aimed shot', lobshot:'Arc projectile - area blast', slaughterhouse:'Grab - Ultimate', marks:'Passive', lightningstep:'Transform - Invulnerable dash', skyfall:'Ground target - Lightning strikes', stormofruin:'Arena - Ultimate', sysoverride:'Arena - Ultimate', roller:'Held key - paint trail', colorsweep:'Area - 360 sweep', paintquake:'Ground target - Hop + slam', masterpiece:'Area - Ultimate', ritual:'Held key - Fear aura', gravebound:'Ground wave - crawling hands', recoilescape:'Aerial repositioning - rear burst', bulletrain:'Ground target - Area denial', damned:'Summon - 3 Skeleton Warriors', fallendescent:'Sky Dive - Dark Shockwave'};
+const KIND_TYPE = {dimimpale:'Ground target - Mirror + Teleport', shatteredgravity:'Ground target - Pull zone', grandentrance:'Ground target - Stomp', nostrings:'Aimed - piercing line', wintergrasp:'Ground target - Launch + Frost', crystalcoffin:'Ground target - Immobilize', iceage:'Arena - Ultimate', shockwave:'Projectile', hook:'Projectile - pulls the enemy', rush:'Dash', quake:'Area - Ultimate', voidclaw:'Ground target - Launch', shadowstep:'Teleport - Targeted', abysshand:'Targeted - Ultimate', shadowhook:'Gap closer - Aimed hook', replicate:'Teleport - shadows', onslaught:'Targeted - Ultimate', stench:'Toggle - aura', vomit:'Held key - ground trap', sniper:'Held key - aimed shot', lobshot:'Arc projectile - area blast', slaughterhouse:'Grab - Ultimate', marks:'Passive', lightningstep:'Transform - Invulnerable dash', skyfall:'Ground target - Lightning strikes', stormofruin:'Arena - Ultimate', sysoverride:'Arena - Ultimate', roller:'Held key - paint trail', colorsweep:'Area - 360 sweep', paintquake:'Ground target - Hop + slam', masterpiece:'Area - Ultimate', ritual:'Held key - Fear aura', gravebound:'Ground wave - crawling hands', recoilescape:'Aerial repositioning - rear burst', bulletrain:'Ground target - Area denial', damned:'Summon - 3 Skeleton Warriors', fallendescent:'Sky Dive - Dark Shockwave', bouncy:'Passive - Landing shockwave', goo:'Buff - random goo, passed on by a punch', stomp:'Held key - Air dive (ATK in the air)', superjump:'Ground target - Super jump + aimed throw', giantshicka:'Arena - Ultimate'};
 const dmgNum = (f, o, m) => Math.round((10 + f.c.hp / 40) * 2.2 * (1 - armOf(o) / 50) * m);
 function infoRows(){
   const f = G.f[G.me], o = foeOf(f), K = f.K, rows = [], B = K.basic;
   const cdTxt = d => d.charges > 1 ? d.charges + ' charges, ' + d.recharge + 's each' : d.cd != null ? d.cd + 's' : '-';
-  const dmgTxt = d => d.kind === 'finalcurtain' ? d.combo.map(c => c.fixed).join(' / ') + ' (beast, ' + d.combo.reduce((a, c) => a + c.fixed, 0) + ' total)' : d.kind === 'damned' ? '~' + dmgNum(f, o, .5) + ' / ~' + dmgNum(f, o, .7) + ' / ~' + dmgNum(f, o, 1.3) + ' (3 skeletons)' : d.kind === 'abysshand' ? '~' + dmgNum(f, o, d.ticks * d.tickDmg + d.crushDmg + d.slamDmg) + ' total' : d.kind === 'shadowstep' ? '-' : d.kind === 'skyfall' || d.kind === 'stormofruin' ? '~' + dmgNum(f, o, d.dmg) + ' / strike' : d.kind === 'lightningstep' ? '~' + dmgNum(f, o, d.dmg) + ' / hit' : d.tickDmg ? '~' + dmgNum(f, o, Math.floor((d.frenzy || 1.5) / (d.tick || .09)) * d.tickDmg + d.finishDmg) + ' total' : d.hits ? '~' + dmgNum(f, o, d.hits.reduce((a, h) => a + h.dmg, 0)) + ' total' : d.dps ? '~' + Math.round(o.max * d.dps) + '/s' : d.dmg ? '~' + dmgNum(f, o, d.dmg) : '-';
+  const dmgTxt = d => d.kind === 'superjump' ? '~' + dmgNum(f, o, d.shot.dmg) : d.kind === 'goo' ? 'Purple ~' + Math.round(o.max * d.dps * d.dotDur) + ' over ' + d.dotDur + 's / Green -' + Math.round(d.slow * 100) + '% speed' : d.kind === 'finalcurtain' ? d.combo.map(c => c.fixed).join(' / ') + ' (beast, ' + d.combo.reduce((a, c) => a + c.fixed, 0) + ' total)' : d.kind === 'damned' ? '~' + dmgNum(f, o, .5) + ' / ~' + dmgNum(f, o, .7) + ' / ~' + dmgNum(f, o, 1.3) + ' (3 skeletons)' : d.kind === 'abysshand' ? '~' + dmgNum(f, o, d.ticks * d.tickDmg + d.crushDmg + d.slamDmg) + ' total' : d.kind === 'shadowstep' ? '-' : d.kind === 'skyfall' || d.kind === 'stormofruin' ? '~' + dmgNum(f, o, d.dmg) + ' / strike' : d.kind === 'lightningstep' ? '~' + dmgNum(f, o, d.dmg) + ' / hit' : d.tickDmg ? '~' + dmgNum(f, o, Math.floor((d.frenzy || 1.5) / (d.tick || .09)) * d.tickDmg + d.finishDmg) + ' total' : d.hits ? '~' + dmgNum(f, o, d.hits.reduce((a, h) => a + h.dmg, 0)) + ' total' : d.dps ? '~' + Math.round(o.max * d.dps) + '/s' : d.dmg ? '~' + dmgNum(f, o, d.dmg) : '-';
   rows.push({tag:'ATK', name:'Basic attack', type:B.combo ? B.combo.length + '-hit combo' : 'Basic attack', cd:'-', dmg:B.combo ? '~' + B.combo.map(c => dmgNum(f, o, c.dmg ?? B.dmg)).join(' / ') : '~' + dmgNum(f, o, B.dmg), desc:B.desc});
   if(K.passive) rows.push({tag:'PAS', name:K.passive.name, type:K.passive.type || 'Passive', cd:K.passive.cd ? K.passive.cd + 's' : '-', dmg:K.passive.dps ? '~' + Math.round(o.max * K.passive.dps) + '/s bleed' : '-', desc:K.passive.desc});
   if(B.unleash) rows.push({tag:'HOLD', name:B.unleash.name, type:'Held key - charge', cd:'-', dmg:'~' + dmgNum(f, o, B.unleash.base * 1.25) + ' - ~' + dmgNum(f, o, B.unleash.base * 2), desc:B.unleash.desc});
   if(B.burst) rows.push({tag:'HOLD', name:B.burst.name, type:'Held key - 2 charge stages', cd:'-', dmg:'~' + dmgNum(f, o, B.burst.norm.dmg) + ' - ~' + dmgNum(f, o, B.burst.full.dmg), desc:B.burst.desc});
-  if(K.hold) rows.push({tag:'HOLD', name:K.hold.name, type:K.hold.type || KIND_TYPE[K.hold.kind] || 'Held key', cd:K.hold.cd != null ? K.hold.cd + 's' : '-', dmg:K.hold.shot ? '~' + dmgNum(f, o, K.hold.shot.dmg) : K.hold.dps ? '~' + Math.round(o.max * K.hold.dps) + '/s each' : '-', desc:K.hold.desc});
+  if(K.hold) rows.push({tag:'HOLD', name:K.hold.name, type:K.hold.type || KIND_TYPE[K.hold.kind] || 'Held key', cd:K.hold.cd != null ? K.hold.cd + 's' : '-', dmg:K.hold.kind === 'stomp' ? '~' + dmgNum(f, o, K.hold.dmg + K.hold.dmgPx * 300) + ' (300 px fall)' : K.hold.shot ? '~' + dmgNum(f, o, K.hold.shot.dmg) : K.hold.dps ? '~' + Math.round(o.max * K.hold.dps) + '/s each' : '-', desc:K.hold.desc});
   K.skills.forEach((d, i) => d && d.name && rows.push({tag:i ? 'II' : 'I', name:d.name, type:d.type || KIND_TYPE[d.kind] || (d.aim ? 'Aimed skill' : 'Skill'), cd:cdTxt(d), dmg:dmgTxt(d), desc:d.desc}));
   const u = K.ultimate; if(u && u.name) rows.push({tag:'ULT', name:u.name, type:u.type || KIND_TYPE[u.kind] || 'Ultimate', cd:cdTxt(u), dmg:dmgTxt(u), desc:u.desc});
   return rows;

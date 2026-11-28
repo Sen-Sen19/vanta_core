@@ -1,0 +1,1 @@
+Characters.add({id:'bear', name:'BEAR#012123', role:'Adventurer', color:'#a65a2e', tag:'The Hero of a Thousand Lands', hp:220, arm:5, spd:4.6, ult:'GIANT SHICKA'});

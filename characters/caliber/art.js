@@ -457,4 +457,4 @@
       cx.beginPath(); cx.ellipse(s.x, s.y, len * .5, r, 0, 0, 7); cx.fill(); cx.shadowBlur = 0;
     }
   });
-})();
+})();so 

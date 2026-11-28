@@ -22,16 +22,20 @@ function show(id){
   document.body.classList.toggle('ingame', id === 'game');
   $$('.screen').forEach(s => s.classList.toggle('active', s.id === id));
   if(id === 'select') render();
+  if(id === 'select' || id === 'online') Preview.kick();   // wake the model-preview draw loop
 }
 
 function art(c){ return c.img ? `<img src="${c.img}" alt="${c.name}">` : c.name[0]; }
+
+const duo = () => state.size > 1;   // 2v2 / 3v3: the opponents are random, you only pick your own fighter
 
 function paint(n, id, animate){
   const c = id ? charById(id) : null;
   const fig = $('#fig'+n);
   if(c){
-    fig.style.background = c.img ? 'none' : `linear-gradient(160deg, ${c.color}, ${c.color}77)`;
-    fig.className = 'fig'; fig.innerHTML = art(c);
+    fig.style.background = 'none'; fig.className = 'fig';
+    if(c.img) fig.innerHTML = art(c);
+    else Preview.mount(fig, c, {face: n === 2 ? -1 : 1, live: true, label: `${c.name}, ${c.tag}`});   // the real in-game model (preview.js)
     $('#n'+n).textContent = c.name;
     $('#tg'+n).textContent = c.tag;
     $('#st'+n).textContent = `HP ${c.hp} | ARM ${c.arm} | SPD ${c.spd}`;
@@ -45,24 +49,27 @@ function paint(n, id, animate){
 }
 
 function render(animate){
-  $('#t3').textContent = state.size > 1 ? `${state.size}v${state.size}: your bot allies and the extra opponents are picked at random` : 'select a hero, then press CONFIRM (or ENTER)';
+  const foe = duo() ? null : state.enemy;   // 2v2 / 3v3: no opponent pick, they are drawn at random on CONFIRM
+  $('#t3').textContent = duo() ? `${state.size}v${state.size}: your allies and ALL opponents are picked at random` : 'select a hero, then press CONFIRM (or ENTER)';
   $('#t2').textContent = state.slot === 'player' ? 'PICK YOUR FIGHTER - THEN CONFIRM' : 'PICK YOUR OPPONENT - THEN CONFIRM';
   $('#pv1').classList.toggle('on', state.slot === 'player');
   $('#pv2').classList.toggle('on', state.slot === 'enemy');
+  $('#pv2 .lab').textContent = duo() ? 'OPPONENTS (RANDOM)' : 'OPPONENT (P2)';
   paint(1, state.player, animate === 'player');
-  paint(2, state.enemy, animate === 'enemy');
+  paint(2, foe, animate === 'enemy');
+  if(duo()) $('#h2').textContent = 'random fighters - revealed in battle'; else $('#h2').textContent = 'choose your opponent';
   $$('#grid .tile').forEach(t => {
     t.classList.toggle('s1', t.dataset.id === state.player);
-    t.classList.toggle('s2', t.dataset.id === state.enemy);
+    t.classList.toggle('s2', t.dataset.id === foe);
   });
   $$('#mrow button').forEach(b => b.classList.toggle('sel', b.dataset.key === state.ai));
-  $('#confirm').disabled = !(state.player && state.enemy);
+  $('#confirm').disabled = !(state.player && (duo() || state.enemy));
 }
 
 let shuffling = false;
 function pick(slot, id, animate){
   state[slot] = id;
-  if(slot === 'player') state.slot = 'enemy';   // jump to opponent pick
+  if(slot === 'player' && !duo()) state.slot = 'enemy';   // jump to opponent pick (1v1 only)
   render(animate);
 }
 function randomPick(){
@@ -93,11 +100,13 @@ function buildGrid(){
   CHARACTERS.forEach((c, i) => {
     const b = document.createElement('button');
     b.className = 'tile'; b.dataset.id = c.id;
-    b.innerHTML = `<span class="no">${i+1}</span><div class="av" style="background:${c.img ? 'none' : c.color}">${art(c)}</div><b>${c.name}</b><span class="tag a">P1</span><span class="tag b">P2</span>`;
+    b.innerHTML = `<span class="no">${i+1}</span><div class="av"></div><b>${c.name}</b><small class="tt">${c.tag}</small><span class="tag a">P1</span><span class="tag b">P2</span>`;
+    const av = b.querySelector('.av');
+    if(c.img) av.innerHTML = art(c); else Preview.mount(av, c);   // the real model, drawn once (preview.js)
     b.onclick = () => {
       const slot = state.slot;
       state[slot] = c.id;
-      if(slot === 'player') state.slot = 'enemy';   // jump to opponent pick
+      if(slot === 'player' && !duo()) state.slot = 'enemy';   // jump to opponent pick (1v1 only)
       render(slot);
     };
     g.appendChild(b);
@@ -126,14 +135,16 @@ function randomFighters(n, taken){   // n random fighters, no repeats while the 
   return out;
 }
 function confirm(){
-  if(!(state.player && state.enemy)) return;
-  const sparring = state.ai === 'sparring', n = state.size, taken = [state.player, state.enemy];
+  if(!(state.player && (duo() || state.enemy))) return;
+  const sparring = state.ai === 'sparring', n = state.size, taken = [state.player];
+  const lead = duo() ? randomFighters(1, taken)[0] : charById(state.enemy);   // 2v2 / 3v3: the lead opponent is random too
+  if(!duo()) taken.push(state.enemy);
   startMatch({
     mode: sparring ? 'sparring' : 'ai',
     difficulty: sparring ? null : state.ai,
     size: n,                                           // team size: you + (n-1) bot allies vs n bots
     player: charById(state.player),
-    enemy: charById(state.enemy),
+    enemy: lead,
     allies: randomFighters(n - 1, taken),              // your bot teammates
     foes: randomFighters(n - 1, taken)                 // the opponent's bot teammates
   });
@@ -252,9 +263,9 @@ async function hardRefresh(){
 
 // ---- EVENTS ----
 $$('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
-$$('[data-size]').forEach(b => b.onclick = () => { state.size = +b.dataset.size; show('select'); });
+$$('[data-size]').forEach(b => b.onclick = () => { state.size = +b.dataset.size; state.slot = 'player'; show('select'); });
 $('#refreshBtn').onclick = hardRefresh;
-$$('.pv').forEach(p => p.onclick = () => { state.slot = p.dataset.slot; render(); });
+$$('.pv').forEach(p => p.onclick = () => { if(duo() && p.dataset.slot === 'enemy') return; state.slot = p.dataset.slot; render(); });
 $('#confirm').onclick = confirm;
 $('#quitBtn').onclick = () => show('menu');
 $('#pSelBtn').onclick = () => show('select');

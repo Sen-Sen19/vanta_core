@@ -57,7 +57,9 @@ const Net = (() => {
     CHARACTERS.forEach((c, i) => {
       const b = document.createElement('button');
       b.className = 'tile'; b.dataset.id = c.id;
-      b.innerHTML = `<span class="no">${i + 1}</span><div class="av" style="background:${c.img ? 'none' : c.color}">${art(c)}</div><b>${c.name}</b><span class="tag a">YOU</span>`;
+      b.innerHTML = `<span class="no">${i + 1}</span><div class="av"></div><b>${c.name}</b><small class="tt">${c.tag}</small><span class="tag a">YOU</span>`;
+      const av = b.querySelector('.av');
+      if(c.img) av.innerHTML = art(c); else Preview.mount(av, c);   // real model (preview.js)
       b.onclick = () => {
         myPick = c.id; if(role === 'guest'){ myReady = false; send({t:'ready', r:false}); }
         send({t:'pick', id:myPick}); refresh();
@@ -214,14 +216,14 @@ const Net = (() => {
   // ------------------------------------------------------------------ HOST: run the match, send snapshots, read the guest's inputs
   let sentCache = {}, sentObj = {}, snapAcc = 0, snapN = 0, remoteIn = null, sentParts = new WeakSet();
   function dropSub(key){ const p = key + '.'; for(const k in sentCache) if(k.startsWith(p)) delete sentCache[k]; }
-  function resetRemote(){ remoteIn = {l:0, r:0, held:false, aim:null, ay:0, jq:false, dq:false, aq:false, skq:null}; }
+  function resetRemote(){ remoteIn = {l:0, r:0, held:false, aim:null, skAim:null, ay:0, jq:false, dq:false, aq:false, skq:null}; }
   function hostStart(g){
     inMatch = true; sentCache = {}; sentObj = {}; sentParts = new WeakSet(); snapAcc = 0; snapN = 0; resetRemote(); buildStatic();
     send({t:'start', h:g.cfg.player.id, g:g.cfg.enemy.id, P:g.P});
   }
   function onInput(m){
     if(!remoteIn) return;
-    remoteIn.l = m.l ? 1 : 0; remoteIn.r = m.r ? 1 : 0; remoteIn.held = !!m.held; remoteIn.aim = m.aim || null; remoteIn.ay = +m.ay || 0;
+    remoteIn.l = m.l ? 1 : 0; remoteIn.r = m.r ? 1 : 0; remoteIn.held = !!m.held; remoteIn.aim = m.aim || null; remoteIn.skAim = m.skAim || null; remoteIn.ay = +m.ay || 0;
     if(m.jq) remoteIn.jq = true; if(m.dq) remoteIn.dq = true; if(m.aq) remoteIn.aq = true;
     if(m.sk && m.sk.length){ const s = m.sk[m.sk.length - 1]; remoteIn.skq = {i:s.i, ax:s.ax, ay:s.ay, drag:!!s.drag, m:s.m}; }
   }
@@ -301,7 +303,8 @@ const Net = (() => {
     if(Ctl.atk){ pend.aq = true; Ctl.atk = false; }
     [0, 1, 2].forEach(i => { if(Ctl.sk[i]){ pend.sk.push({i, ax:Ctl.sk[i].ax, ay:Ctl.sk[i].ay, drag:Ctl.sk[i].drag, m:Ctl.sk[i].m}); Ctl.sk[i] = null; } });
     const aim = Ctl.atkV || (Math.hypot(Ctl.sx, Ctl.sy) > .4 ? {x:Ctl.sx, y:Ctl.sy} : null);
-    const st = {l:Ctl.l, r:Ctl.r, held:Ctl.held, ay:Ctl.dn - Ctl.up, aim:aim ? {x:R2(aim.x), y:R2(aim.y)} : null};
+    const skAim = Ctl.aim && Ctl.aim.drag && !Ctl.aim.cancel ? Ctl.aim : null;
+    const st = {l:Ctl.l, r:Ctl.r, held:Ctl.held, ay:Ctl.dn - Ctl.up, aim:aim ? {x:R2(aim.x), y:R2(aim.y)} : null, skAim:skAim ? {i:skAim.i, x:R2(skAim.ax), y:R2(skAim.ay)} : null};
     const ss = JSON.stringify(st), flags = pend.jq || pend.dq || pend.aq || pend.sk.length;
     if(flags || (now - lastIn >= INPUT_MS && (ss !== lastInStr || now - lastIn >= 150))){
       send({t:'in', ...st, jq:pend.jq, dq:pend.dq, aq:pend.aq, sk:pend.sk});

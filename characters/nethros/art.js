@@ -4,10 +4,10 @@
 //
 // LAYER ORDER (back to front) - this is the layout:
 //   1. behind():  aura, smoke column, ash, back cloak
-//   2. torso():   far arm (idle only, tucked behind the robe) -> robe -> front drape -> capelet
+//   2. torso():   REAR arm = skeleton aN (always, behind the robe) -> robe -> front drape -> capelet
 //   3. body.js:   head circle (invisible, covered by the hood)
-//   4. front():   far arm (attacks / raised poses) -> HOOD -> near arm (always on top of the hood) -> dark energy
-//   So a raised arm never gets hidden by the hood, and the far arm always sits BEHIND the head.
+//   4. front():   HOOD -> FRONT arm = skeleton aF (on top of the body and the hood) -> dark energy
+//   So the rear arm is always behind the body + head, and the front arm is always in front of them.
 //
 // POSES: idle = both sleeves hang in front, hands low and together at the waist (classic reaper).
 //        raised skills = arms spread into a "Y" (near arm up-forward, far arm up-back) so the hood stays visible between them.
@@ -84,10 +84,10 @@
     const vx = (e.x - s.x) / d1, vy = (e.y - s.y) / d1, ux = (h.x - e.x) / d2, uy = (h.y - e.y) / d2;
     const wr = {x: h.x - ux * 3, y: h.y - uy * 3}, n1 = [-vy, vx], n2 = [-uy, ux];
     let nm = [n1[0] + n2[0], n1[1] + n2[1]]; const nl = Math.hypot(nm[0], nm[1]) || 1; nm = [nm[0] / nl, nm[1] / nl];
-    const w0 = 3, w1 = 3.8, w2 = 5.4;
+    const w0 = 3, w1 = 3.8, w2 = 6.4;
     const L = [[s.x + n1[0] * w0, s.y + n1[1] * w0], [e.x + nm[0] * w1, e.y + nm[1] * w1], [wr.x + n2[0] * w2, wr.y + n2[1] * w2]];
     const R = [[s.x - n1[0] * w0, s.y - n1[1] * w0], [e.x - nm[0] * w1, e.y - nm[1] * w1], [wr.x - n2[0] * w2, wr.y - n2[1] * w2]];
-    const cuff = [], ln = [1.6, 6.5, 2, 5.5, 1.6];
+const cuff = [], ln = [3, 13, 4, 11, 3];
     ln.forEach((len, i) => {
       const k = i / 4, x = L[2][0] + (R[2][0] - L[2][0]) * k, y = L[2][1] + (R[2][1] - L[2][1]) * k, sw = Math.sin(t * 1.3 + i * 1.7) * .6;
       cuff.push([x + ux * len * .5 + sw - tr * .04 * len, y + uy * len * .5 + len * .8]);
@@ -96,49 +96,27 @@
     let fill = '#fff';
     if(!white){ fill = cx.createLinearGradient(s.x, s.y, wr.x, wr.y); fill.addColorStop(0, c0); fill.addColorStop(1, c1); }
     poly(cx, pts, fill, white ? null : INK, .6);
-    cx.fillStyle = white ? '#fff' : c0; cx.beginPath(); cx.arc(s.x, s.y, w0 + .4, 0, 7); cx.fill();      // shoulder cap
+    // shoulder cap
     if(white) return;
-    cx.lineCap = 'round';
+       cx.lineCap = 'round';
+    cx.strokeStyle = DEEP; cx.lineWidth = .6; cx.beginPath(); cx.moveTo(lerp(s.x, wr.x, .25), lerp(s.y, wr.y, .25)); cx.lineTo(wr.x, wr.y); cx.stroke();
     cx.strokeStyle = EDGE; cx.lineWidth = .5; cx.beginPath(); L.forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke();
-    cx.strokeStyle = DEEP; cx.lineWidth = .8; cx.beginPath(); cx.moveTo(s.x, s.y); cx.quadraticCurveTo(e.x + nm[0] * .6, e.y + nm[1] * .6, wr.x, wr.y); cx.stroke();
     cx.strokeStyle = FOLD; cx.lineWidth = .5; cx.beginPath(); cx.moveTo(e.x + nm[0] * 1.8, e.y + nm[1] * 1.8); cx.lineTo(wr.x + n2[0] * 3.4, wr.y + n2[1] * 3.4); cx.stroke();
   }
 
   // SKELETAL hand: small bony palm + 4 long thin crooked fingers (3 phalanges, knuckles) + short thumb. Rare slow twitch.
-  function claws(cx, A, white, t, near){
-    const h = A.hand, e = A.el, th = Math.atan2(h.y - e.y, h.x - e.x);
-    const curl = -.5 * Math.tanh(Math.sin(th) * 4);
-    const BONE = '#1c1c1f', BONE2 = '#2b2b2f', RIM = '#3c3c41';
-    cx.strokeStyle = white ? '#fff' : BONE; cx.lineWidth = 1.3; cx.lineCap = 'round'; cx.beginPath(); cx.moveTo(h.x - Math.cos(th) * 4.5, h.y - Math.sin(th) * 4.5); cx.lineTo(h.x, h.y); cx.stroke();
-    cx.fillStyle = white ? '#fff' : BONE2; cx.strokeStyle = RIM; cx.lineWidth = .5;
-    cx.beginPath(); cx.ellipse(h.x + Math.cos(th) * 1, h.y + Math.sin(th) * 1, 2.3, 1.8, th, 0, 7); cx.fill(); if(!white) cx.stroke();
-    const F = [[-.55, 10.4, 1, .55], [-.2, 12.6, 1.05, -.4], [.2, 13, 1.05, .5], [.56, 10.6, .95, -.35], [1.5, 6.2, .9, .3]];
-    F.forEach(([off, len0, w, crook], i) => {
-      const len = len0 * 1.0;
-      const thumb = i === 4, ph = (near ? 0 : 1.7) + i * 2.1;
-      const tw = Math.pow(Math.max(0, Math.sin(t * .55 + ph)), 14) * .3;
-      const a0 = th + off * .8 + Math.sin(t * 1.0 + ph) * .03 + tw * (thumb ? -.4 : 1), sg = thumb ? -1.3 : 1;
-      let x = h.x + Math.cos(a0) * 1.8, y = h.y + Math.sin(a0) * 1.8;
-      const SL = [.42, .33, .25], P = [[x, y]], N = [[-Math.sin(a0), Math.cos(a0)]], wd = [.62 * w, .48 * w, .36 * w, .03];
-      for(let k = 0; k < 3; k++){
-        const a = a0 + curl * sg * (k + 1) / 3 * (thumb ? .8 : 1.1) + crook * .22 * (k + 1) / 3;
-        x += Math.cos(a) * len * SL[k]; y += Math.sin(a) * len * SL[k];
-        P.push([x, y]); N.push([-Math.sin(a), Math.cos(a)]);
-      }
-      const L = P.map((q, k) => [q[0] + N[k][0] * wd[k], q[1] + N[k][1] * wd[k]]), R = P.map((q, k) => [q[0] - N[k][0] * wd[k], q[1] - N[k][1] * wd[k]]).reverse();
-      poly(cx, L.concat(R), white ? '#fff' : BONE, white ? null : RIM, .35);
-      if(white) return;
-      cx.fillStyle = BONE2; cx.strokeStyle = RIM; cx.lineWidth = .3;
-      [1, 2].forEach(k => { cx.beginPath(); cx.arc(P[k][0], P[k][1], .62 * w, 0, 7); cx.fill(); cx.stroke(); });
-      cx.strokeStyle = 'rgba(160,160,166,.5)'; cx.lineWidth = .35; cx.lineCap = 'round';
-      cx.beginPath(); cx.moveTo(P[1][0], P[1][1]); cx.lineTo(P[2][0], P[2][1]); cx.lineTo(P[3][0], P[3][1]); cx.stroke();
-    });
-  }
+  
 
   // one whole arm = sleeve + hand
-  const arm = (cx, A, white, t, tr, near) => {
+  // ROOT_K: the skeleton's shoulder sits up at the neck, right under the hood's face. The sleeve ROOT is moved this fraction of the way
+  // down the torso (0 = neck, 1 = waist) so the arms come out of the middle of the robe and not out of the face. The elbow follows
+  // half as far; the hand stays exactly where the pose puts it (so the dark soul still leaves the drawn hands).
+  const ROOT_K = .3;   // sleeve starts a little below the neck, tucked under the capelet (0 = neck)
+  const arm = (cx, A, white, t, tr, near, S) => {
+    const s = {x:A.s.x + (S.pel.x - A.s.x) * ROOT_K, y:A.s.y + (S.pel.y - A.s.y) * ROOT_K}, h = A.hand;
+    // elbow exactly on the shoulder->hand line = perfectly straight sleeve
+    A = {s, el:{x:(s.x + h.x) / 2, y:(s.y + h.y) / 2}, hand:h};
     sleeve(cx, A, white, t, tr, near ? '#2e2e32' : '#242427', near ? '#161618' : '#121214');
-    claws(cx, A, white, t, near);
   };
 
   Characters.art('nethros', {
@@ -149,7 +127,7 @@
     colors: {shirt:'#0c0c0e', limb:'#1c1c1f', far:'#121214', head:'#050506', dark:'#050506', hand:'rgba(0,0,0,0)', legs:'rgba(0,0,0,0)', legsFar:'rgba(0,0,0,0)'},
 
     foot(){},
-    farFront: f => f.atk > 0,                                       // far arm is drawn in front() during attacks
+    farFront: () => false,                                          // the rear arm is ALWAYS behind the body (drawn in torso(), before the robe)
 
     spring(p, A){
       if(A.skill === 'fallendescent') return {k:380, d:26};
@@ -203,10 +181,8 @@
     // Idle: almost motionless, both sleeves hang in front, forearms folded so the hands rest low near the waist. Running: arms trail behind.
     pose(tg, f, t, run, K){
       const idle = 1 - run, b = Math.sin(t * 1.3), b2 = Math.sin(t * 1.3 - .9), b3 = Math.sin(t * 1.0 + 1.4);
-      tg.lean = idle * b * .006 + run * .1;
-      tg.head = idle * b2 * .008 - run * .02;
-      tg.aN = idle * (.3 + b2 * .02) + run * -.4;   tg.eN = .2 + idle * (.2 + b3 * .02) + run * .15;
-      tg.aF = idle * (-.42 - b3 * .02) + run * -1.0;   tg.eF = .15 + idle * (.1 - b2 * .02) + run * .2;
+       tg.aF = idle * (.28 + b2 * .01) + run * -.4;   tg.eF = 0;   // FRONT arm: straight, hangs in front of the robe
+      tg.aN = idle * (-.3 - b3 * .01) + run * -1.0;  tg.eN = 0;   // REAR arm: straight, hangs behind the robe
       legs(tg, HOVER + b * .9 * FLOAT);
     },
 
@@ -262,9 +238,9 @@
 
       // BACK CLOAK
       {
-        S._farFront = f.atk > 0;
+        S._farFront = false;
         const sx = S.sh.x, sy = S.sh.y, hx = S.head.x, hy = S.head.y, by = py + 1, F = c => white ? '#fff' : c;
-        const hem = hemPts(px - 2, by, [[-18, 20], [-15, 25], [-12, 21], [-9, 26], [-6, 22], [-3, 26], [0, 21], [3, 25], [6, 21], [9, 20]], trail, t, 1.1, 1.1);
+            const hem = hemPts(px - 2, by, [[-18, 20], [-15, 25], [-12, 21], [-9, 26], [-6, 22], [-3, 26], [0, 21], [3, 25], [6, 21], [9, 20]], trail, t, 1.1, 1.7);
         const g = cx.createLinearGradient(0, sy, 0, by + 24), wf = clamp((py - sy) / (by + 24 - sy), .2, .85);
         g.addColorStop(0, '#29292d'); g.addColorStop(wf * .55, '#18181b'); g.addColorStop(wf, '#101012'); g.addColorStop(wf + (1 - wf) * .65, 'rgba(10,10,12,.75)'); g.addColorStop(1, 'rgba(10,10,12,0)');
         const gi = cx.createLinearGradient(0, sy, 0, by + 24); gi.addColorStop(0, INK); gi.addColorStop(wf, INK); gi.addColorStop(1, 'rgba(2,2,3,0)');
@@ -309,8 +285,7 @@
       const white = f.flash > 0, tr = S._trail || 0;
       f.handW = {N:{x:f.x + f.face * S.aN.hand.x, y:f.y + S.aN.hand.y}, F:{x:f.x + f.face * S.aF.hand.x, y:f.y + S.aF.hand.y}};
 
-      // 1) far arm BEHIND the hood (idle: torso() already drew it behind the robe)
-      if(f.atk > 0) arm(cx, S.aF, white, t, tr, false);
+      // 1) (the rear arm is drawn in torso(), behind the robe, in every pose)
 
       // 2) HOOD
       const h = S.head, ang = Math.atan2(h.x - S.sh.x, -(h.y - S.sh.y)), A = f.A || {};
@@ -318,29 +293,30 @@
       cx.save(); cx.translate(h.x, h.y); cx.rotate(ang); cx.scale(.96, .96);
       const hoodPath = () => {
         cx.beginPath(); cx.moveTo(5.2, 9.2);
-        cx.bezierCurveTo(8.8, 7.2, 10.6, 2.4, 9.6, -2.8);
-        cx.bezierCurveTo(8.6, -7.8, 4.2, -10.8, -.6, -10.8);
-        cx.bezierCurveTo(-5.4, -10.8, -9.6, -7.4, -10.4, -1.6);
-        cx.bezierCurveTo(-11.2, 3.8, -11.8, 9, -10.6, 12.6);
-        cx.quadraticCurveTo(-8.4, 11.6, -7, 13.2);
-        cx.quadraticCurveTo(-5, 11.8, -3.2, 13.6);
-        cx.quadraticCurveTo(-1.2, 11.6, .8, 12.6);
-        cx.quadraticCurveTo(3, 10.6, 5.2, 9.2);
+        cx.bezierCurveTo(9.4, 6.6, 10.8, 1, 9.4, -4.4);
+        cx.bezierCurveTo(8.2, -8.6, 3, -12.4, -4.4, -16.5);
+        cx.bezierCurveTo(-9, -13, -12.2, -6, -11.6, 1);
+        cx.bezierCurveTo(-11.2, 6, -12.4, 10, -11.4, 14.6);
+        cx.quadraticCurveTo(-9, 12.4, -7.4, 15.4);
+        cx.quadraticCurveTo(-5, 12.6, -3.2, 16);
+        cx.quadraticCurveTo(-1, 12.8, .8, 14.6);
+        cx.quadraticCurveTo(3.2, 11.6, 5.2, 9.2);
         cx.closePath();
       };
-      const facePath = () => {
-        cx.beginPath(); cx.moveTo(3.4, -7.4);
-        cx.bezierCurveTo(7, -7.2, 8.6, -3.2, 8.2, 1.2);
-        cx.bezierCurveTo(7.8, 5, 5.6, 7.4, 3, 7.6);
-        cx.bezierCurveTo(-.6, 6, -1.8, -1, -.4, -5);
-        cx.bezierCurveTo(.2, -6.6, 1.4, -7.2, 3.4, -7.4);
+        const facePath = () => {
+        cx.beginPath(); cx.moveTo(4.4, -11.6);
+        cx.bezierCurveTo(8, -9, 9.2, -3.4, 8.6, 2);
+        cx.bezierCurveTo(8.2, 5.6, 7, 8, 5.4, 8.8);
+        cx.lineTo(-.4, 9);
+        cx.bezierCurveTo(-2, 3, -2.4, -5, -.6, -8.2);
+        cx.bezierCurveTo(.6, -10, 2.4, -11, 4.4, -11.6);
         cx.closePath();
       };
       if(white){ hoodPath(); cx.fillStyle = '#fff'; cx.fill(); }
       else {
         cx.fillStyle = 'rgba(0,0,0,.4)'; cx.beginPath(); cx.ellipse(-1.4, 12.2, 9.6, 2.6, 0, 0, 7); cx.fill();
         hoodPath();
-        const hg = cx.createLinearGradient(-10, -10, 8, 12); hg.addColorStop(0, '#2c2c30'); hg.addColorStop(.5, '#17171a'); hg.addColorStop(1, '#0a0a0c');
+        const hg = cx.createLinearGradient(-10, -10, 8, 12);hg.addColorStop(0, '#1d1d21'); hg.addColorStop(.5, '#0f0f11'); hg.addColorStop(1, '#050506');
         cx.fillStyle = hg; cx.fill(); cx.strokeStyle = INK; cx.lineWidth = 1.1; cx.lineJoin = 'round'; cx.stroke(); cx.strokeStyle = 'rgba(140,140,146,.34)'; cx.lineWidth = .6; cx.stroke();
         cx.lineCap = 'round';
         cx.strokeStyle = DEEP; cx.lineWidth = .9;
@@ -356,17 +332,16 @@
         cx.save(); facePath(); cx.clip();
         for(let i = 0; i < 4; i++){
           const x = 3 + Math.sin(t * .45 + i * 1.9) * 3.4, y = -2 + Math.cos(t * .38 + i * 2.6) * 4.6, r = 3.6 + (i % 2) * 1.4;
-          const sg = cx.createRadialGradient(x, y, 0, x, y, r); sg.addColorStop(0, 'rgba(30,30,33,.12)'); sg.addColorStop(1, 'rgba(30,30,33,0)');
+          const sg = cx.createRadialGradient(x, y, 0, x, y, r); sg.addColorStop(0, 'rgba(30,30,33,.04)');sg.addColorStop(1, 'rgba(30,30,33,0)');
           cx.fillStyle = sg; cx.fillRect(x - r, y - r, r * 2, r * 2);
         }
         cx.restore();
         facePath(); cx.strokeStyle = 'rgba(0,0,0,.9)'; cx.lineWidth = 1.2; cx.lineJoin = 'round'; cx.stroke();
-        cx.strokeStyle = 'rgba(120,120,126,.34)'; cx.lineWidth = .5; cx.beginPath(); cx.moveTo(3.4, -7.4); cx.bezierCurveTo(7, -7.2, 8.6, -3.2, 8.2, 1.2); cx.stroke();
+        cx.strokeStyle = 'rgba(120,120,126,.34)'; cx.lineWidth = .5; cx.beginPath(); cx.moveTo(4.4, -11.6); cx.bezierCurveTo(8, -9, 9.2, -3.4, 8.6, 2); cx.stroke();
       }
       cx.restore();
-
       // 3) near arm ON TOP of the hood
-      arm(cx, S.aN, white, t, tr, true);
+      arm(cx, S.aF, white, t, tr, true, S);   // FRONT arm = skeleton aF, on top of the body + hood
 
       if(white) return;
 
@@ -416,18 +391,18 @@
         cx.strokeStyle = col; cx.lineWidth = lw || .6; cx.lineCap = 'round'; cx.beginPath(); cx.moveTo(p0[0], p0[1]);
         cx.quadraticCurveTo((p0[0] + p1[0]) / 2 + bend, (p0[1] + p1[1]) / 2, p1[0], p1[1]); cx.stroke();
       };
-      if(!S._farFront) arm(cx, S.aF, white, tt, tr, false);
+      if(!S._farFront) arm(cx, S.aN, white, tt, tr, false, S);   // REAR arm = skeleton aN, behind the robe
 
       const c0 = pt(-.05, 0), by = a.y + 2, gy0 = b.y, gy1 = a.y + 36, wf = clamp((a.y - gy0) / (gy1 - gy0), .2, .88);
       const fade = (c1, c2, c3) => { const g = cx.createLinearGradient(0, gy0, 0, gy1); g.addColorStop(0, c1); g.addColorStop(wf * .5, c2); g.addColorStop(wf, c3); g.addColorStop(wf + (1 - wf) * .6, c3.replace(/rgb\((.*)\)/, 'rgba($1,.7)')); g.addColorStop(1, c3.replace(/rgb\((.*)\)/, 'rgba($1,0)')); return g; };
-      const hem = hemPts(c0[0], by, [[-14, 21], [-11.4, 24], [-8.8, 20], [-6, 24.5], [-3.2, 21], [.6, 25], [3.6, 20.5], [6.6, 24], [9.6, 20.5], [12.4, 23]], tr, tt, .6);
-      const under = hemPts(c0[0], by, [[-12, 22], [-9.4, 26], [-6.8, 21], [-4, 26], [-1.2, 22], [2.2, 26], [4.8, 21.5], [7.4, 25], [10.2, 22]], tr, tt, .6);
+      const hem = hemPts(c0[0], by, [[-14, 21], [-11.4, 24], [-8.8, 20], [-6, 24.5], [-3.2, 21], [.6, 25], [3.6, 20.5], [6.6, 24], [9.6, 20.5], [12.4, 23]], tr, tt, .6, 1.6);
+      const under = hemPts(c0[0], by, [[-12, 22], [-9.4, 26], [-6.8, 21], [-4, 26], [-1.2, 22], [2.2, 26], [4.8, 21.5], [7.4, 25], [10.2, 22]], tr, tt, .6, 1.6);
       const Sb = pt(1.0, -13), Mb = pt(.5, -6.4), Wb = [c0[0] - 5.2 - tr * .2, a.y + 2], Wf = [c0[0] + 5, a.y + 2], Mf = pt(.5, 6), Sf = pt(1.0, 12), Nf = pt(1.1, 4.6), Nb = pt(1.1, -4.6);
       const robePath = () => {
         cx.beginPath(); cx.moveTo(Nb[0], Nb[1]); cx.lineTo(Sb[0], Sb[1]); cx.quadraticCurveTo(Mb[0], Mb[1], Wb[0], Wb[1]);
         hem.forEach(q => cx.lineTo(q[0], q[1])); cx.lineTo(Wf[0], Wf[1]); cx.quadraticCurveTo(Mf[0], Mf[1], Sf[0], Sf[1]); cx.lineTo(Nf[0], Nf[1]); cx.closePath();
       };
-      const drape = [pt(.9, 1.5), pt(.52, 7), [c0[0] + 6.4, a.y + 2]].concat(hemPts(c0[0], by, [[10.5, 19], [8, 23], [5.5, 18.5], [3, 22], [.8, 18.5]], tr, tt, .6), [pt(.45, 1.2)]);
+      const drape = [pt(.9, 1.5), pt(.52, 7), [c0[0] + 6.4, a.y + 2]].concat(hemPts(c0[0], by, [[10.5, 19], [8, 23], [5.5, 18.5], [3, 22], [.8, 18.5]], tr, tt, .6, 1.6), [pt(.45, 1.2)]);
       const cape = Q([[1.12,-3],[1.03,-11],[.84,-12.6],[.66,-9.2],[.76,-7.6],[.56,-6.4],[.68,-4.6],[.54,-3.2],[.66,-1.4],[.52,.2],[.66,2],[.54,3.6],[.68,5.2],[.56,6.8],[.72,8.2],[.56,9.8],[.88,10.6],[1.03,9],[1.12,3.2]], 1.08);
 
       if(white){ poly(cx, under, '#fff'); robePath(); cx.fillStyle = '#fff'; cx.fill(); poly(cx, drape, '#fff'); poly(cx, cape, '#fff'); return; }
@@ -436,7 +411,7 @@
 
       poly(cx, [[c0[0] - 6, a.y], [c0[0] + 6, a.y]].concat(under.slice().reverse()), fade('#0a0a0b', '#0a0a0b', 'rgb(8,8,9)'), null);
 
-      const g = fade('#2d2d31', '#1b1b1e', 'rgb(16,16,18)');
+const g = fade('#1a1a1d', '#0e0e10', 'rgb(10,10,12)');
       robePath(); cx.fillStyle = g; cx.fill();
       const gs = cx.createLinearGradient(0, gy0, 0, gy1); gs.addColorStop(0, INK); gs.addColorStop(wf, INK); gs.addColorStop(1, 'rgba(2,2,3,0)');
       cx.strokeStyle = gs; cx.lineWidth = .7; cx.lineJoin = 'round'; cx.stroke();
@@ -452,7 +427,7 @@
 
       poly(cx, drape, fade('#323236', '#232326', 'rgb(20,20,23)'), null);
       cx.strokeStyle = gs; cx.lineWidth = .6; cx.beginPath(); drape.forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke();
-      line(pt(.82, 3.4), [c0[0] + 6.6, a.y + 9], 1, DEEP, .7); line(pt(.7, 7), [c0[0] + 9, a.y + 8], -1, FOLD, .6);
+  
       cx.strokeStyle = ge; cx.lineWidth = .5; cx.beginPath(); drape.slice(2, drape.length - 1).forEach((q, i) => i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])); cx.stroke();
       cx.restore();
 

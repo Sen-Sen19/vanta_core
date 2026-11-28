@@ -359,7 +359,7 @@
     front(cx, f, t, S, P){
       const white = f.flash > 0, s = state(f), tau = t - s.landT;
       head(cx, S, f, t, white);
-      armOver(cx, S, white);C
+      armOver(cx, S, white);
       const K = f.shk;                                                      
       if(K && K.sh && !K.thrown){
         const h = S.aN.hand, e = K.e || 0, ca = Math.cos(e), sa = Math.sin(e);
@@ -373,7 +373,7 @@
         }
         shickaBig(cx, h.x + ca * 7, h.y - sa * 7, -e, white, 1);
       }
-      bigFists(cx, S, f, white);A
+      bigFists(cx, S, f, white);
       if(f.gr && tau >= 0 && tau < .3 && s.amp){                                      // landing dust ticks
         const a = (1 - tau / .3) * .85;
         cx.lineCap = 'round'; cx.strokeStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; cx.lineWidth = 1.5;

@@ -693,7 +693,7 @@ const SKILLS = {
     G.pops.push({x:f.x, y:f.y - f.h - 34, txt:'SYSTEM OVERRIDE', life:1.1});
   },
   // GIANT SHICKA (Bear ultimate): no aim. 3 phases:
-  //   Phase 1 'emerge' (d.emerge s): a huge ice block appears at arena centre, Shicka bursts out (ice chunks fly), cracks spread.
+  //   Phase 1 'emerge' (d.emerge s): a crystal ice block grows out of the floor, shakes and cracks (golden light leaks out), then bursts. Giant Shicka is made of ICE.
   //   Phase 2 'rise'   (d.rise   s): Giant Shicka floats upward above the arena.
   //   Phase 3 'stomp'  (d.stomp  s): free-falls belly-down, slams the ground. On landing a massive shockwave spreads along the floor.
   //   The shockwave only hits grounded enemies (dodge by being airborne). d.swR = max shockwave radius, d.swSpd = spread px/s.
@@ -703,15 +703,10 @@ const SKILLS = {
     const cx = W / 2, gy = my.y;
     const T = (d.emerge || 1.4) + (d.rise || 1.0) + (d.stomp || 1.1);
     startSkillA(f, skillA(d, {time:T, cd:T, root:true, noSlash:true}));
-    G.gs = {src:f, d, t:0, ph:'emerge', cx, gy, iceK:0, cracks:[], swR:0, swDone:false, hid:++HID,
+    G.gs = {src:f, d, t:0, ph:'emerge', cx, gy, iceK:0, grow:0, age:0, mist:[], cracks:[], swR:0, swDone:false, hid:++HID,
       shY: gy - 40,   // Shicka's current Y (feet)
       shX: cx,
-      iceChunks: Array.from({length:16}, (_, i) => ({
-        x: cx + (Math.random() - .5) * 60, y: gy - 60,
-        vx: (Math.random() - .5) * 480, vy: -180 - Math.random() * 300,
-        rot: Math.random() * 6.28, vr: (Math.random() - .5) * 8,
-        w: 10 + Math.random() * 22, life: 1.0
-      }))
+      iceChunks: []
     };
     G.pops.push({x:f.x, y:f.y - f.h - 34, txt:'GIANT SHICKA!', life:1.3});
     G.shake = Math.max(G.shake, .18);
@@ -3085,39 +3080,56 @@ function giantShickaStep(dt){
   if(!G.gs) return;
   const Z = G.gs, d = Z.d, f = Z.src;
   const emerge = d.emerge || 1.4, rise = d.rise || 1.0, stomp = d.stomp || 1.1;
-  Z.t += dt;
+  const R = Math.random;
+  Z.t += dt; Z.age = (Z.age || 0) + dt;
+  Z.mist = Z.mist || []; Z.flash = Math.max(0, (Z.flash || 0) - dt);
+  // visual helpers: frost mist puffs + flying ice shards (no gameplay effect)
+  const mist = (x, y, vx, vy, r, life, a) => { if(Z.mist.length < 140) Z.mist.push({x, y, vx, vy, r, life, max:life, a:a == null ? .5 : a}); };
+  const shards = (x, y, n, spd, up, spread) => { for(let i = 0; i < n; i++) Z.iceChunks.push({x:x + (R() - .5) * (spread || 40), y:y + (R() - .5) * 20, vx:(R() - .5) * spd, vy:-up * (.25 + R() * .75), rot:R() * 6.28, vr:(R() - .5) * 12, w:6 + R() * 18, life:.7 + R() * .7}); };
 
-  // ice chunks physics
+  // ice chunks + frost mist physics
   Z.iceChunks.forEach(c => { c.life -= dt; c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 900 * dt; c.rot += c.vr * dt; });
   Z.iceChunks = Z.iceChunks.filter(c => c.life > 0);
+  Z.mist.forEach(m => { m.life -= dt; m.x += m.vx * dt; m.y += m.vy * dt; m.r += 22 * dt; });
+  Z.mist = Z.mist.filter(m => m.life > 0);
 
   if(Z.ph === 'emerge'){
     const k = Math.min(1, Z.t / emerge);
-    Z.iceK = k;
+    Z.iceK = k; Z.grow = Math.min(1, Z.t / (emerge * .3));          // the block grows out of the floor, then shakes and cracks
     Z.shY = Z.gy - 40 - k * 90;                                      // Shicka rises out of the ice
-    if(k > .6 && Z.cracks.length < 8){
-      for(let i = Z.cracks.length; i < 8; i++){
-        const ang = Math.random() * Math.PI * 2, len = 20 + Math.random() * 50;
-        Z.cracks.push({ax:Z.cx, ay:Z.gy - 40, bx:Z.cx + Math.cos(ang) * len, by:Z.gy - 40 + Math.sin(ang) * len});
-      }
+    const want = Math.floor(Math.max(0, k - .15) / .85 * 12);        // cracks appear one after another and spread (t0 = birth time)
+    while(Z.cracks.length < want) Z.cracks.push({ax:Z.cx + (R() - .5) * 26, ay:Z.gy - 40 - R() * 70, ang:R() * 6.283, len:26 + R() * 56, r2:R(), t0:Z.t});
+    if(R() < dt * 40) mist(Z.cx + (R() - .5) * 140, Z.gy - 4, (R() - .5) * 50, -14 - R() * 26, 7 + R() * 9, .8 + R() * .5, .38);
+    if(k > .5 && R() < dt * 14) shards(Z.cx + (R() - .5) * 90, Z.gy - 60 - R() * 70, 1, 160, 120, 10);   // flakes chip off the straining block
+    if(Z.t >= emerge){
+      Z.ph = 'rise'; Z.t = 0; Z.flash = .3; G.shake = Math.max(G.shake, .25);   // the block BURSTS
+      shards(Z.cx, Z.gy - 80, 38, 1000, 760, 80);
+      for(let i = 0; i < 16; i++) mist(Z.cx + (R() - .5) * 100, Z.gy - 30 - R() * 100, (R() - .5) * 260, -R() * 120, 10 + R() * 10, .7 + R() * .4, .55);
+      G.rings.push({x:Z.cx, y:Z.gy - 70, life:.35}); G.waves.push({x:Z.cx, y:Z.gy - 70, r:130, life:.3, max:.3, col:'#bdf2ff', fill:'#7fd6ff'});
+      G.pops.push({x:Z.cx, y:Z.gy - 160, txt:'RISING!', life:.7});
     }
-    if(Z.t >= emerge){ Z.ph = 'rise'; Z.t = 0; G.shake = Math.max(G.shake, .15); G.pops.push({x:Z.cx, y:Z.gy - 160, txt:'RISING!', life:.7}); }
     return;
   }
   if(Z.ph === 'rise'){
-    const k = Math.min(1, Z.t / rise);
-    Z.shY = (Z.gy - 130) - k * (H * .55);                           // floats up and out of the top
+    const k = Math.min(1, Z.t / rise), e = k * k * (3 - 2 * k) * .5 + k * .5;          // gentle lift-off, then faster
+    Z.shY = (Z.gy - 130) - e * (H * .55);                           // floats up and out of the top
+    if(R() < dt * 50) mist(Z.shX + (R() - .5) * 60, Z.shY + 30 + R() * 30, (R() - .5) * 70, 50 + R() * 80, 6 + R() * 8, .55, .45);   // frost trail
+    if(R() < dt * 12) shards(Z.shX + (R() - .5) * 70, Z.shY + 30, 1, 60, -40, 10);                                                // flakes fall off him
     if(Z.t >= rise){ Z.ph = 'stomp'; Z.t = 0; Z.shY = -H * .3; G.shake = Math.max(G.shake, .1); G.pops.push({x:Z.cx, y:H * .15, txt:'GIANT BELLY STOMP!', life:.9}); }
     return;
   }
   if(Z.ph === 'stomp'){
     Z.shY += (1800 + Z.t * 2200) * dt;                              // accelerates downward
+    if(R() < dt * 70) mist(Z.shX + (R() - .5) * 60, Z.shY - 20 - R() * 80, (R() - .5) * 40, -20, 6 + R() * 7, .45, .4);   // frost trail left in the air
     if(Z.shY >= Z.gy - 50){
-      Z.shY = Z.gy - 50; Z.ph = 'wave'; Z.t = 0;
+      Z.shY = Z.gy - 50; Z.ph = 'wave'; Z.t = 0; Z.flash = .38;
       G.shake = Math.max(G.shake, .9); G.hs = Math.max(G.hs || 0, .18);
       G.rings.push({x:Z.cx, y:Z.gy - 4, life:.4}); G.rings.push({x:Z.cx, y:Z.gy - 4, life:.6});
-      for(let i = 0; i < 28; i++) G.parts.push({x:Z.cx + (Math.random() - .5) * 60, y:Z.gy, vx:(Math.random() - .5) * 900, vy:-Math.random() * 600, life:.6, col:i % 3 === 0 ? '#ffd21f' : i % 3 === 1 ? '#4a8fd8' : '#c2f0ff'});
-      G.waves.push({x:Z.cx, y:Z.gy - 10, r:d.swR || 480, life:.7, max:.7, col:'#ffd21f', fill:'#a65a2e'});
+      for(let i = 0; i < 28; i++) G.parts.push({x:Z.cx + (Math.random() - .5) * 60, y:Z.gy, vx:(Math.random() - .5) * 900, vy:-Math.random() * 600, life:.6, col:i % 4 === 0 ? '#ffffff' : i % 4 === 1 ? '#9ae0ff' : i % 4 === 2 ? '#4aa3e8' : '#ffd21f'});
+      shards(Z.cx, Z.gy - 40, 44, 1300, 900, 70);                    // Shicka SHATTERS on impact
+      for(let i = 0; i < 18; i++) mist(Z.cx + (R() - .5) * 80, Z.gy - 6, (R() - .5) * 700, -R() * 160, 9 + R() * 10, .6 + R() * .4, .55);
+      Z.gCr = Array.from({length:12}, (_, i) => ({ang:i / 12 * 6.283 + R() * .3, len:150 + R() * 340}));        // frost cracks in the floor
+      G.waves.push({x:Z.cx, y:Z.gy - 10, r:d.swR || 480, life:.7, max:.7, col:'#bdf2ff', fill:'#4aa3e8'});
       G.pops.push({x:Z.cx, y:Z.gy - 60, txt:'SHOCKWAVE!', life:1.0});
     }
     return;
@@ -3125,6 +3137,7 @@ function giantShickaStep(dt){
   if(Z.ph === 'wave'){
     const spd = d.swSpd || 520;
     Z.swR += spd * dt;
+    if(Z.swR < (d.swR || 480)) for(const s of [-1, 1]) if(R() < dt * 60) mist(Z.cx + s * Z.swR, Z.gy - 6, s * 30, -40 - R() * 70, 6 + R() * 8, .5, .5);   // frost kicked up at the wave front
     if(!Z.swDone && Z.swR > 0){
       // Hits grounded enemies inside the growing ring band (not already hit this wave, not airborne)
       foesOf(f).forEach(e => {
@@ -3146,270 +3159,222 @@ function giantShickaStep(dt){
     return;
   }
 }
+
+// ---- GIANT SHICKA drawing (all visual: ICE). Hit boxes / timing live in giantShickaStep above and never read any of this. ----
+const _gsH = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };   // fixed pseudo-random 0..1 per index (no per-frame state)
+// Giant Shicka's body in his ORIGINAL colours (yellow, blue belly, orange beak), same shape / units as always (the caller scales it ~4.8x).
+// o = {arm: shoulder angle (< 0 = raised), glow: not used for the colours any more, kept so callers stay the same}. The ICE is only the block, the shards and the shockwave.
+function _iceShicka(c, t, o){
+  const Y = '#ffd21f', YD = '#e3a800', BL = '#4a8fd8', BK = '#0a0a0a', BK2 = '#ff9a0a';
+  // legs
+  _box(c, -2.9, 5.0, 2.4, 3.2, 1.0, YD, 1.1); _box(c, .5, 5.0, 2.4, 3.2, 1.0, YD, 1.1);
+  // arms turn around the shoulder (arm 0 = the original straight-out pose)
+  for(const s of [-1, 1]){ c.save(); c.translate(s * 3.0, .9); c.rotate(s * o.arm); _box(c, s > 0 ? 0 : -3.0, -1.1, 3.0, 2.2, 1.0, Y, 1.2); c.restore(); }
+  // body + blue belly patch
+  _box(c, -3.2, -.8, 6.4, 6.4, 1.8, Y, 1.3);
+  _box(c, -1.8, .4, 3.6, 3.8, 1.1, BL, 0);
+  // ears + head
+  _box(c, -3.8, -10.5, 2.9, 3.1, 1.0, Y, 1.2); _box(c, 1.1, -10.5, 2.9, 3.1, 1.0, Y, 1.2);
+  _box(c, -4.3, -8.2, 8.6, 7.8, 2.2, Y, 1.4);
+  // eyes + shine
+  c.fillStyle = BK; _rrPath(c, -1.9, -6.0, 1.6, 2.6, .6); c.fill(); _rrPath(c, 1.1, -6.0, 1.6, 2.6, .6); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(-1.4, -5.5, .35, 0, 6.283); c.fill(); c.beginPath(); c.arc(1.6, -5.5, .35, 0, 6.283); c.fill();
+  // muzzle + nose
+  _box(c, -1.0, -3.2, 2.8, 2.0, .8, BK2, 1.0);
+  c.fillStyle = BK; _rrPath(c, -.2, -3.0, 1.3, 1.0, .4); c.fill();
+}
 function drawGiantShicka(){
   if(!G.gs) return;
-  const Z = G.gs;
+  const Z = G.gs, d = Z.d, gy = Z.gy, mx = Z.cx, age = Z.age || 0, swMax = d.swR || 480, spd = d.swSpd || 520;
+  const sstep = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+  const poly = (pts, fs, st, lw) => { cx.beginPath(); pts.forEach((p, i) => i ? cx.lineTo(p[0], p[1]) : cx.moveTo(p[0], p[1])); cx.closePath(); if(fs){ cx.fillStyle = fs; cx.fill(); } if(st){ cx.lineJoin = 'round'; cx.lineWidth = lw || 1; cx.strokeStyle = st; cx.stroke(); } };
   cx.save();
 
-  const Y='#ffd21f', YD='#e3a800', BL='#4a8fd8', BK='#0a0a0a', BK2='#ff9a0a';
-  const blockW=100, blockH=145, bx=Z.cx-blockW/2, by=Z.gy-blockH;
-  const ik=Z.iceK;
-
-  // ============================================================
-  // WARNING SHADOW during rise & stomp phases
-  // ============================================================
-  if(Z.ph==='rise'||Z.ph==='stomp'){
-    const prog=(Z.ph==='stomp')?Math.min(1,Z.t/0.5):0.3+0.7*(Z.t/0.4||0);
-    const sw=120+80*prog, sh=14+10*prog;
-    const grd=cx.createRadialGradient(Z.cx,Z.gy,0,Z.cx,Z.gy,sw/2);
-    grd.addColorStop(0,'rgba(0,0,0,'+(0.45*prog)+')');
-    grd.addColorStop(1,'rgba(0,0,0,0)');
-    cx.save(); cx.scale(1,sh/sw); cx.translate(0,Z.gy*(1-sw/sh));
-    cx.fillStyle=grd; cx.beginPath(); cx.arc(Z.cx,Z.gy,sw/2,0,Math.PI*2); cx.fill();
+  // ---- warning shadow while he is up there (rise / stomp) ----
+  if(Z.ph === 'rise' || Z.ph === 'stomp'){
+    const prog = (Z.ph === 'stomp') ? Math.min(1, Z.t / .5) : .3 + .7 * (Z.t / .4 || 0), sw = 120 + 80 * prog, sh = 14 + 10 * prog;
+    const grd = cx.createRadialGradient(mx, gy, 0, mx, gy, sw / 2);
+    grd.addColorStop(0, 'rgba(10,40,80,' + (.45 * prog) + ')'); grd.addColorStop(1, 'rgba(10,40,80,0)');
+    cx.save(); cx.scale(1, sh / sw); cx.translate(0, gy * (1 - sw / sh));
+    cx.fillStyle = grd; cx.beginPath(); cx.arc(mx, gy, sw / 2, 0, Math.PI * 2); cx.fill();
     cx.restore();
   }
 
-  // ============================================================
-  // ICE BLOCK — layered, glowing, with Shicka silhouette inside
-  // ============================================================
-  if(Z.ph==='emerge'||ik>0){
-    const pha=(Z.ph==='emerge')?Math.max(0,1-Z.t*1.3)*ik:ik;
-    cx.save();
-    cx.globalAlpha=pha;
+  // ---- frost patch on the floor: grows under the block, stays after the impact ----
+  {
+    let rx = 0, al = 0;
+    if(Z.ph === 'emerge'){ const g = 1 - Math.pow(1 - Z.grow, 3); rx = 40 + 90 * g; al = .45 * g; }
+    else if(Z.ph === 'wave'){ rx = Math.min(Z.swR, swMax) + 40; al = .3 * Math.max(0, 1 - Z.t / 1.6); }
+    if(al > .01){ cx.fillStyle = 'rgba(215,244,255,' + al.toFixed(3) + ')'; cx.beginPath(); cx.ellipse(mx, gy + 1, rx, Math.max(4, rx * .07), 0, 0, 6.283); cx.fill(); }
+  }
 
-    // inner glow (pulsing gold — Shicka's power building)
-    const pulse=0.5+0.5*Math.sin(G.t*9);
-    const grd=cx.createRadialGradient(Z.cx,by+blockH*0.55,10,Z.cx,by+blockH*0.55,blockH*0.65);
-    grd.addColorStop(0,'rgba(255,220,50,'+(0.5+0.3*pulse)+')');
-    grd.addColorStop(0.5,'rgba(180,235,255,0.25)');
-    grd.addColorStop(1,'rgba(180,235,255,0)');
-    cx.fillStyle=grd; cx.fillRect(bx-20,by-10,blockW+40,blockH+20);
+  // ---- emerge: golden light pulsing inside the block (before Shicka, so he is lit from behind) ----
+  if(Z.ph === 'emerge'){
+    const k = Z.iceK, gl = .5 + .5 * Math.sin(age * (8 + 14 * k));
+    const rg = cx.createRadialGradient(mx, gy - 70, 6, mx, gy - 70, 125);
+    rg.addColorStop(0, 'rgba(255,225,90,' + ((.25 + .5 * k) * (.6 + .4 * gl)).toFixed(3) + ')'); rg.addColorStop(.5, 'rgba(170,235,255,.2)'); rg.addColorStop(1, 'rgba(170,235,255,0)');
+    cx.fillStyle = rg; cx.fillRect(mx - 130, gy - 200, 260, 230);
+  }
+  // ---- cold aura while he flies / falls ----
+  if(Z.ph === 'rise' || Z.ph === 'stomp'){
+    const ag = cx.createRadialGradient(Z.shX, Z.shY, 10, Z.shX, Z.shY, 120);
+    ag.addColorStop(0, 'rgba(255,214,60,.38)'); ag.addColorStop(1, 'rgba(255,190,30,0)');
+    cx.fillStyle = ag; cx.beginPath(); cx.arc(Z.shX, Z.shY, 120, 0, 6.283); cx.fill();
+  }
+  // ---- dive streaks ----
+  if(Z.ph === 'stomp'){
+    const sp = Math.min(1, Z.t * 2.5);
+    cx.save(); cx.lineCap = 'round';
+    for(let i = -3; i <= 3; i++){
+      const x = Z.shX + i * 13 + (_gsH(i) - .5) * 8, len = (90 + _gsH(i + 9) * 150) * sp, g = cx.createLinearGradient(x, Z.shY - 40 - len, x, Z.shY - 20);
+      g.addColorStop(0, 'rgba(190,240,255,0)'); g.addColorStop(1, 'rgba(225,248,255,.6)');
+      cx.strokeStyle = g; cx.lineWidth = 3 - Math.abs(i) * .3; cx.beginPath(); cx.moveTo(x, Z.shY - 40 - len); cx.lineTo(x, Z.shY - 20); cx.stroke();
+    }
+    cx.restore();
+  }
 
-    // Shicka silhouette inside the ice (visible while ice is still up)
-    if(pha>0.25){
-      cx.save();
-      const sc=4.8, sxc=Z.cx, syc=Z.gy;
-      cx.translate(sxc,syc); cx.scale(sc,sc);
-      cx.globalAlpha=Math.min(0.45*pha, 0.45);
-      cx.fillStyle='rgba(255,200,30,0.7)';
-      // silhouette blobs (front-view, rough fill only)
-      _rrPath(cx,-2.9,5.0,2.4,3.2,1.0); cx.fill(); _rrPath(cx,.5,5.0,2.4,3.2,1.0); cx.fill(); // legs
-      _rrPath(cx,-3.2,-.8,6.4,6.4,1.8); cx.fill(); // body
-      _rrPath(cx,-5.8,-.1,3.0,2.2,1.0); cx.fill(); _rrPath(cx,2.8,-.1,3.0,2.2,1.0); cx.fill(); // arms
-      _rrPath(cx,-4.3,-8.2,8.6,7.8,2.2); cx.fill(); // head
-      _rrPath(cx,-3.8,-10.5,2.9,3.1,1.0); cx.fill(); _rrPath(cx,1.1,-10.5,2.9,3.1,1.0); cx.fill(); // ears
+  // ---- THE ICE SHICKA (pose + squash / stretch depend on the phase) ----
+  {
+    let a = 1, sc = 4.8, sx = 1, sy = 1, arm = .3, rot = 0, glow = 1, yo = 0;
+    if(Z.ph === 'emerge'){ const k = Z.iceK; a = .32 + .68 * sstep(.05, .8, k); sc = 4.8 * (.7 + .3 * k); arm = .35 - .9 * sstep(.6, 1, k); glow = .5 + .5 * k; sy = 1 + .04 * k * Math.sin(age * 40); }
+    else if(Z.ph === 'rise'){ arm = -.45 + Math.sin(age * 15) * .55; yo = Math.sin(age * 7) * 3; sy = 1 + .03 * Math.sin(age * 15); }
+    else if(Z.ph === 'stomp'){ arm = -1.25; sy = 1.12 + Math.min(.3, Z.t * .7); sx = 1 / Math.sqrt(sy); rot = .18 * Math.sign((Z.src ? Z.src.x : mx) - mx || 1); glow = 1.3; }
+    else { const q = Z.t; a = Math.max(0, 1 - q / .45); sy = .78 + .22 * sstep(0, .25, q); sx = 1.14 - .14 * sstep(0, .25, q); arm = .6; glow = 1.6 * a; }   // lands, squashes, then shatters (the shards fly from giantShickaStep)
+    if(a > .01){
+      cx.save(); cx.globalAlpha = a; cx.translate(Z.shX, Z.shY + yo); if(rot) cx.rotate(rot); cx.scale(sc * sx, sc * sy);
+      _iceShicka(cx, age, {arm, glow});
       cx.restore();
     }
+  }
 
-    cx.globalAlpha=pha;
-
-    // back ice panel (darker, slight offset)
-    cx.fillStyle='rgba(140,220,245,0.55)'; cx.strokeStyle='#4a8fd8'; cx.lineWidth=1.5;
-    cx.beginPath(); cx.rect(bx-6,by+6,blockW+12,blockH); cx.fill(); cx.stroke();
-
-    // mid ice panel
-    cx.fillStyle='rgba(180,238,255,0.65)'; cx.strokeStyle='#5bbae8'; cx.lineWidth=2;
-    cx.beginPath(); cx.rect(bx-3,by+3,blockW+6,blockH); cx.fill(); cx.stroke();
-
-    // front ice panel (lightest)
-    cx.fillStyle='rgba(220,248,255,0.75)'; cx.strokeStyle='#8ad4f0'; cx.lineWidth=2.5;
-    cx.beginPath(); cx.rect(bx,by,blockW,blockH); cx.fill(); cx.stroke();
-
-    // starburst cracks radiating from Shicka's center inside the block
-    if(Z.cracks.length){
-      cx.globalAlpha=Math.min(0.9,pha*1.2);
-      cx.strokeStyle='#ffffff'; cx.lineWidth=2.2; cx.setLineDash([]);
-      Z.cracks.forEach(cr=>{
-        cx.beginPath(); cx.moveTo(cr.ax,cr.ay); cx.lineTo(cr.bx,cr.by); cx.stroke();
-        // secondary hairline crack branching off
-        const mx=(cr.ax+cr.bx)/2, my=(cr.ay+cr.by)/2;
-        const ang=Math.atan2(cr.by-cr.ay,cr.bx-cr.ax)+0.5;
-        const brLen=18+cr.r2*22;
-        cx.lineWidth=1; cx.strokeStyle='rgba(255,255,255,0.65)';
-        cx.beginPath(); cx.moveTo(mx,my); cx.lineTo(mx+Math.cos(ang)*brLen,my+Math.sin(ang)*brLen); cx.stroke();
-      });
-      cx.lineWidth=1; cx.strokeStyle='rgba(255,255,255,0.4)'; cx.setLineDash([2,5]);
-      Z.cracks.forEach(cr=>{
-        cx.beginPath(); cx.moveTo(cr.ax,cr.ay); cx.lineTo((cr.ax+cr.bx)/2,(cr.ay+cr.by)/2); cx.stroke();
-      });
-      cx.setLineDash([]);
+  // ---- emerge: the crystal block (drawn OVER Shicka so he looks frozen inside it) ----
+  if(Z.ph === 'emerge'){
+    const k = Z.iceK, eg = 1 - Math.pow(1 - Z.grow, 3), BH = 150 * eg, jit = k > .6 ? Math.sin(age * 63) * (k - .6) * 6 : 0;
+    cx.save(); cx.translate(mx + jit, gy);
+    const P = [[-54, 0], [-58, -.72 * BH], [-34, -.96 * BH], [8, -BH], [40, -.9 * BH], [56, -.66 * BH], [52, 0]];
+    // little crystals around the foot of the block
+    for(const s of [-1, 1]) for(let j = 0; j < 3; j++){
+      const x = s * (60 + j * 15), h = (18 + _gsH(j * 2 + (s > 0 ? 1 : 0)) * 20) * eg * (1 - j * .25);
+      poly([[x - 7, 0], [x + 1, -h], [x + 7, 0]], 'rgba(200,240,255,.85)', '#5bbae8', 1.4);
     }
-
-    // shiny highlight strip on ice
-    const hg=cx.createLinearGradient(bx,by,bx+blockW*0.4,by+blockH*0.3);
-    hg.addColorStop(0,'rgba(255,255,255,0.35)'); hg.addColorStop(1,'rgba(255,255,255,0)');
-    cx.fillStyle=hg; cx.globalAlpha=pha*0.8;
-    cx.beginPath(); cx.rect(bx,by,blockW*0.38,blockH); cx.fill();
-
+    const bg = cx.createLinearGradient(0, -BH, 0, 0); bg.addColorStop(0, 'rgba(228,249,255,.74)'); bg.addColorStop(1, 'rgba(110,196,240,.64)');
+    poly(P, bg, '#5bbae8', 2.6);
+    cx.save();
+    cx.beginPath(); P.forEach((p, i) => i ? cx.lineTo(p[0], p[1]) : cx.moveTo(p[0], p[1])); cx.closePath(); cx.clip();
+    poly([[-54, 0], [-58, -.72 * BH], [-34, -.96 * BH], [-14, -.3 * BH]], 'rgba(255,255,255,.24)');       // facets
+    poly([[-34, -.96 * BH], [8, -BH], [14, -.35 * BH], [-14, -.3 * BH]], 'rgba(255,255,255,.10)');
+    poly([[8, -BH], [40, -.9 * BH], [56, -.66 * BH], [52, 0], [14, -.35 * BH]], 'rgba(30,90,170,.18)');
+    cx.lineCap = 'round';
+    Z.cracks.forEach(c => {                                                   // light leaks out through the cracks
+      const g = Math.min(1, (Z.t - c.t0) / .25), ax = c.ax - mx, ay = c.ay - gy, ex = ax + Math.cos(c.ang) * c.len * g, ey = ay + Math.sin(c.ang) * c.len * g;
+      cx.strokeStyle = 'rgba(255,220,90,' + (.55 * k).toFixed(2) + ')'; cx.lineWidth = 4.5; cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(ex, ey); cx.stroke();
+      cx.strokeStyle = '#ffffff'; cx.lineWidth = 1.6; cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(ex, ey); cx.stroke();
+      const mx2 = (ax + ex) / 2, my2 = (ay + ey) / 2, ba = c.ang + (c.r2 > .5 ? .6 : -.6), bl = (14 + c.r2 * 20) * g;
+      cx.lineWidth = 1; cx.strokeStyle = 'rgba(255,255,255,.7)'; cx.beginPath(); cx.moveTo(mx2, my2); cx.lineTo(mx2 + Math.cos(ba) * bl, my2 + Math.sin(ba) * bl); cx.stroke();
+    });
+    const hg = cx.createLinearGradient(-54, -BH, -10, -BH * .4); hg.addColorStop(0, 'rgba(255,255,255,.42)'); hg.addColorStop(1, 'rgba(255,255,255,0)');   // moving shine
+    const sh = ((age * .8) % 1) * 140 - 30;
+    cx.fillStyle = hg; cx.fillRect(-54, -BH, 22, BH);
+    cx.fillStyle = 'rgba(255,255,255,.22)'; cx.beginPath(); cx.moveTo(sh - 8, 0); cx.lineTo(sh + 6, 0); cx.lineTo(sh + 6 + 30, -BH); cx.lineTo(sh - 8 + 30, -BH); cx.closePath(); cx.fill();
+    cx.restore();
     cx.restore();
   }
 
-  // ============================================================
-  // ICE CHUNKS
-  // ============================================================
-  Z.iceChunks.forEach(c=>{
-    if(c.life<=0) return;
-    cx.save(); cx.translate(c.x,c.y); cx.rotate(c.rot);
-    cx.globalAlpha=Math.min(1,c.life*2.5);
-    // polygon shard shape (larger, irregular)
-    cx.beginPath();
-    const hw=c.w/2, hh=c.w*0.5;
-    cx.moveTo(-hw,-hh*0.5); cx.lineTo(hw*0.5,-hh); cx.lineTo(hw,hh*0.3);
-    cx.lineTo(hw*0.3,hh); cx.lineTo(-hw*0.7,hh*0.6); cx.closePath();
-    const sg=cx.createLinearGradient(-hw,-hh,hw,hh);
-    sg.addColorStop(0,'#e8f8ff'); sg.addColorStop(1,'#9dd8f0');
-    cx.fillStyle=sg; cx.fill();
-    cx.strokeStyle='#4a8fd8'; cx.lineWidth=1.4; cx.stroke();
-    // inner shine
-    cx.globalAlpha*=0.5; cx.fillStyle='rgba(255,255,255,0.6)';
-    cx.beginPath(); cx.arc(-hw*0.2,-hh*0.2,c.w*0.15,0,Math.PI*2); cx.fill();
+  // ---- ice crystals orbiting him while he rises ----
+  if(Z.ph === 'rise'){
+    const fade = sstep(0, .25, Z.t);
+    for(let i = 0; i < 6; i++){
+      const ang = age * 1.8 + i * 1.047, rx = 78 + 8 * Math.sin(age * 3 + i), px = Z.shX + Math.cos(ang) * rx, py = Z.shY + Math.sin(ang) * rx * .42 - 4, s = 7 + (i % 3) * 3;
+      cx.save(); cx.globalAlpha = .9 * fade; cx.translate(px, py); cx.rotate(ang * 1.5);
+      poly([[0, -s * 1.5], [s * .7, 0], [0, s * 1.5], [-s * .7, 0]], 'rgba(205,244,255,.92)', '#4aa3e8', 1.3);
+      poly([[0, -s * 1.5], [s * .7, 0], [0, 0]], 'rgba(255,255,255,.5)');
+      cx.restore();
+    }
+  }
+
+  // ---- ice chunks / shards ----
+  Z.iceChunks.forEach(c => {
+    if(c.life <= 0) return;
+    cx.save(); cx.translate(c.x, c.y); cx.rotate(c.rot); cx.globalAlpha = Math.min(1, c.life * 2.5);
+    const hw = c.w / 2, hh = c.w * .5, sg = cx.createLinearGradient(-hw, -hh, hw, hh); sg.addColorStop(0, '#f2fcff'); sg.addColorStop(1, '#8fd2f0');
+    poly([[-hw, -hh * .5], [hw * .5, -hh], [hw, hh * .3], [hw * .3, hh], [-hw * .7, hh * .6]], sg, '#4a8fd8', 1.4);
+    cx.fillStyle = 'rgba(255,255,255,.55)'; cx.beginPath(); cx.arc(-hw * .2, -hh * .2, c.w * .13, 0, 6.283); cx.fill();
     cx.restore();
   });
 
-  // ============================================================
-  // GIANT SHICKA BODY — FRONT VIEW
-  // ============================================================
-  const sc=4.8;
-  cx.save();
-  cx.translate(Z.shX,Z.shY);
-  // stomp phase: slight forward lean (not full 90° rotation)
-  if(Z.ph==='stomp'){ const lean=0.18*Math.sign((Z.src?Z.src.x:Z.cx)-Z.cx||1); cx.rotate(lean); }
-  cx.scale(sc,sc);
-
-  // body shadow
-  cx.save(); cx.globalAlpha=0.18; cx.fillStyle='#2a140a';
-  _rrPath(cx,-3.5,.0,7.0,8.0,2.0); cx.fill(); cx.restore();
-
-  // legs (front view — two legs visible)
-  _box(cx,-2.9,5.0,2.4,3.2,1.0,YD,1.1);
-  _box(cx,.5,5.0,2.4,3.2,1.0,YD,1.1);
-
-  // body
-  _box(cx,-3.2,-.8,6.4,6.4,1.8,Y,1.3);
-
-  // blue belly patch
-  _box(cx,-1.8,.4,3.6,3.8,1.1,BL,0);
-
-  // arms (both sides)
-  _box(cx,-5.8,-.1,3.0,2.2,1.0,Y,1.2);
-  _box(cx,2.8,-.1,3.0,2.2,1.0,Y,1.2);
-
-  // ears (both)
-  _box(cx,-3.8,-10.5,2.9,3.1,1.0,Y,1.2);
-  _box(cx,1.1,-10.5,2.9,3.1,1.0,Y,1.2);
-
-  // head
-  _box(cx,-4.3,-8.2,8.6,7.8,2.2,Y,1.4);
-
-  // eyes (black rounded)
-  cx.fillStyle=BK;
-  _rrPath(cx,-1.9,-6.0,1.6,2.6,.6); cx.fill();
-  _rrPath(cx,1.1,-6.0,1.6,2.6,.6); cx.fill();
-
-  // eye shine
-  cx.fillStyle='rgba(255,255,255,0.7)';
-  cx.beginPath(); cx.arc(-1.4,-5.5,.35,0,Math.PI*2); cx.fill();
-  cx.beginPath(); cx.arc(1.6,-5.5,.35,0,Math.PI*2); cx.fill();
-
-  // muzzle
-  _box(cx,-1.0,-3.2,2.8,2.0,.8,BK2,1.0);
-
-  // nose
-  cx.fillStyle=BK; _rrPath(cx,-.2,-3.0,1.3,1.0,.4); cx.fill();
-
-  cx.restore();
-
-  // ============================================================
-  // GROUND CRACKS (persist after stomp, radiate from impact)
-  // ============================================================
-  if((Z.ph==='wave'||Z.ph==='stomp')&&Z.groundCracks){
-    cx.save(); cx.strokeStyle='#2a140a'; cx.lineWidth=3; cx.globalAlpha=0.65;
-    Z.groundCracks.forEach(cr=>{
-      cx.beginPath(); cx.moveTo(Z.cx,Z.gy);
-      cx.lineTo(Z.cx+Math.cos(cr.ang)*cr.len,Z.gy+Math.sin(cr.ang)*cr.len*0.15);
-      cx.stroke();
-      // secondary branch
-      cx.lineWidth=1.5; cx.globalAlpha=0.4;
-      const bx2=Z.cx+Math.cos(cr.ang)*cr.len*0.6;
-      const by2=Z.gy+Math.sin(cr.ang)*cr.len*0.09;
-      cx.beginPath(); cx.moveTo(bx2,by2);
-      cx.lineTo(bx2+Math.cos(cr.ang+0.4)*cr.len*0.35,by2+Math.sin(cr.ang+0.4)*cr.len*0.05);
-      cx.stroke();
-      cx.lineWidth=3; cx.globalAlpha=0.65;
+  // ---- frost cracks in the floor after the impact ----
+  if(Z.ph === 'wave' && Z.gCr){
+    const al = Math.max(0, 1 - Z.t / 1.6), grow = Math.min(1, Z.t / .18);
+    cx.save(); cx.lineCap = 'round';
+    Z.gCr.forEach(c => {
+      const ex = mx + Math.cos(c.ang) * c.len * grow, ey = gy + Math.sin(c.ang) * c.len * .15 * grow;
+      cx.globalAlpha = .55 * al; cx.strokeStyle = '#1f4f86'; cx.lineWidth = 4; cx.beginPath(); cx.moveTo(mx, gy); cx.lineTo(ex, ey); cx.stroke();
+      cx.globalAlpha = .9 * al; cx.strokeStyle = '#d8f4ff'; cx.lineWidth = 1.6; cx.beginPath(); cx.moveTo(mx, gy); cx.lineTo(ex, ey); cx.stroke();
     });
     cx.restore();
   }
 
-  // ============================================================
-  // SHOCKWAVE (wave phase) — multi-ring jagged impressive version
-  // ============================================================
-  if(Z.ph==='wave'&&Z.swR>0){
-    const gy=Z.gy, R=Z.swR;
-    const pu=0.5+0.5*Math.sin(G.t*20);
+  // ---- SHOCKWAVE: a ripple of ice spikes bursting out of the floor + a frozen ring ----
+  if(Z.ph === 'wave' && Z.swR > 0){
+    const R0 = Z.swR, pu = .5 + .5 * Math.sin(Z.age * 20);
     cx.save();
-
-    // === trailing dust haze ===
-    for(let s=-1;s<=1;s+=2){
-      const ex=Z.cx+s*R;
-      const hgrd=cx.createLinearGradient(Z.cx,gy,ex,gy);
-      hgrd.addColorStop(0,'rgba(166,100,46,0)');
-      hgrd.addColorStop(0.6,'rgba(166,100,46,0.18)');
-      hgrd.addColorStop(1,'rgba(255,180,30,0.08)');
-      cx.fillStyle=hgrd; cx.globalAlpha=0.7;
-      cx.fillRect(Math.min(Z.cx,ex),gy-10,R,18);
+    // ice spikes: pop up when the front passes, hold, then melt away behind it
+    for(let s = -1; s <= 1; s += 2) for(let i = 1; i * 22 <= R0; i++){
+      const off = i * 22, age2 = (R0 - off) / spd, rnd = _gsH(i * 3 + (s > 0 ? 1 : 0));
+      const h = (26 + rnd * 40) * Math.min(1, age2 / .09) * Math.max(0, 1 - Math.max(0, age2 - .35) / .45) * (1 - .45 * Math.min(1, off / swMax));
+      if(h < 1.5) continue;
+      const x = mx + s * off, w = 9 + rnd * 8, tip = x + (rnd - .5) * 6;
+      poly([[x - w / 2, gy], [tip, gy - h], [x, gy]], '#eafaff', '#3a8fd0', 1);
+      poly([[x, gy], [tip, gy - h], [x + w / 2, gy]], '#86c9ee', '#3a8fd0', 1);
     }
-
-    // === jagged ground ripple (3 rings) ===
-    const rings=[
-      {off:0,  col:'rgba(255,210,31,0.95)', lw:4+3*pu, blur:16},
-      {off:12, col:'rgba(255,165,0,0.55)',  lw:5,       blur:8},
-      {off:26, col:'rgba(166,90,46,0.3)',   lw:6,       blur:4},
-    ];
-    rings.forEach((rg,ri)=>{
-      const r2=Math.max(0,R-rg.off);
-      if(r2<=0) return;
-      cx.globalAlpha=1;
-      cx.strokeStyle=rg.col; cx.lineWidth=rg.lw;
-      cx.shadowColor=rg.col; cx.shadowBlur=rg.blur;
-      // jagged wave along ground: draw as polyline with sine offset
-      const steps=Math.ceil(r2*2/4);
-      for(let s=-1;s<=1;s+=2){
+    // trailing cold haze
+    for(let s = -1; s <= 1; s += 2){
+      const ex = mx + s * R0, hg = cx.createLinearGradient(mx, gy, ex, gy);
+      hg.addColorStop(0, 'rgba(170,225,255,0)'); hg.addColorStop(.6, 'rgba(170,225,255,.2)'); hg.addColorStop(1, 'rgba(235,252,255,.12)');
+      cx.fillStyle = hg; cx.fillRect(Math.min(mx, ex), gy - 10, R0, 18);
+    }
+    // jagged frozen ripple (3 rings)
+    const rings = [{off:0, col:'rgba(235,252,255,.95)', lw:4 + 3 * pu, blur:16, sc:'#9ae6ff'}, {off:12, col:'rgba(120,200,245,.6)', lw:5, blur:8, sc:'#4aa3e8'}, {off:26, col:'rgba(70,140,215,.35)', lw:6, blur:4, sc:'#2f68ae'}];
+    rings.forEach((rg, ri) => {
+      const r2 = Math.max(0, R0 - rg.off); if(r2 <= 0) return;
+      cx.strokeStyle = rg.col; cx.lineWidth = rg.lw; cx.shadowColor = rg.sc; cx.shadowBlur = rg.blur;
+      const steps = Math.ceil(r2 * 2 / 4);
+      for(let s = -1; s <= 1; s += 2){
         cx.beginPath();
-        for(let i=0;i<=steps;i++){
-          const px=Z.cx+s*(i/steps)*r2;
-          const jag=(ri===0)?(Math.sin(i*0.9+G.t*22)*2.5*(i/steps)):(Math.sin(i*0.6+G.t*15)*1.5*(i/steps));
-          if(i===0) cx.moveTo(px,gy+jag); else cx.lineTo(px,gy+jag);
+        for(let i = 0; i <= steps; i++){
+          const px = mx + s * (i / steps) * r2, jag = (ri === 0 ? Math.sin(i * .9 + Z.age * 22) * 2.5 : Math.sin(i * .6 + Z.age * 15) * 1.5) * (i / steps);
+          if(i === 0) cx.moveTo(px, gy + jag); else cx.lineTo(px, gy + jag);
         }
         cx.stroke();
       }
     });
-    cx.shadowBlur=0;
-
-    // === leading edge burst dots ===
-    for(const s of[-1,1]){
-      const ex=Z.cx+s*R;
-      // outer glow circle
-      const rg2=cx.createRadialGradient(ex,gy,0,ex,gy,22+8*pu);
-      rg2.addColorStop(0,'rgba(255,230,80,'+(0.9+0.1*pu)+')');
-      rg2.addColorStop(0.4,'rgba(255,180,20,0.7)');
-      rg2.addColorStop(1,'rgba(255,120,0,0)');
-      cx.globalAlpha=1; cx.fillStyle=rg2;
-      cx.beginPath(); cx.arc(ex,gy,22+8*pu,0,Math.PI*2); cx.fill();
-      // solid core dot
-      cx.shadowColor='#fff'; cx.shadowBlur=10;
-      cx.fillStyle='#ffffff';
-      cx.beginPath(); cx.arc(ex,gy,5+2*pu,0,Math.PI*2); cx.fill();
-      cx.shadowBlur=0;
+    cx.shadowBlur = 0;
+    // glowing leading edge with a 4-point frost star
+    for(const s of [-1, 1]){
+      const ex = mx + s * R0, rg2 = cx.createRadialGradient(ex, gy, 0, ex, gy, 22 + 8 * pu);
+      rg2.addColorStop(0, 'rgba(255,255,255,' + (.9 + .1 * pu).toFixed(2) + ')'); rg2.addColorStop(.4, 'rgba(150,225,255,.7)'); rg2.addColorStop(1, 'rgba(80,170,240,0)');
+      cx.fillStyle = rg2; cx.beginPath(); cx.arc(ex, gy, 22 + 8 * pu, 0, 6.283); cx.fill();
+      const L = 15 + 6 * pu; cx.strokeStyle = '#ffffff'; cx.lineWidth = 2; cx.lineCap = 'round';
+      cx.beginPath(); cx.moveTo(ex - L, gy); cx.lineTo(ex + L, gy); cx.moveTo(ex, gy - L * 1.4); cx.lineTo(ex, gy + L * .4); cx.stroke();
     }
-
-    // === shockwave ground ellipse ring (flattened arc along floor) ===
-    cx.globalAlpha=0.35+0.2*pu;
-    cx.strokeStyle='rgba(255,210,31,0.8)'; cx.lineWidth=3+2*pu;
-    cx.shadowColor='#ffd21f'; cx.shadowBlur=10;
-    cx.beginPath(); cx.ellipse(Z.cx,gy,R,Math.min(R*0.09,20),0,Math.PI,Math.PI*2);
-    cx.stroke(); cx.shadowBlur=0;
-
+    cx.globalAlpha = .35 + .2 * pu; cx.strokeStyle = 'rgba(190,240,255,.85)'; cx.lineWidth = 3 + 2 * pu; cx.shadowColor = '#9ae6ff'; cx.shadowBlur = 10;
+    cx.beginPath(); cx.ellipse(mx, gy, R0, Math.min(R0 * .09, 20), 0, Math.PI, Math.PI * 2); cx.stroke(); cx.shadowBlur = 0;
     cx.restore();
+  }
+
+  // ---- frost mist puffs ----
+  Z.mist.forEach(m => {
+    const al = m.a * (m.life / m.max); if(al < .01) return;
+    const mg = cx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);   // soft cloud, not a flat disc
+    mg.addColorStop(0, 'rgba(238,251,255,' + (al * .8).toFixed(3) + ')'); mg.addColorStop(1, 'rgba(190,232,255,0)');
+    cx.fillStyle = mg; cx.beginPath(); cx.arc(m.x, m.y, m.r, 0, 6.283); cx.fill();
+  });
+
+  // ---- white flash when the block bursts / Shicka lands ----
+  if(Z.flash > 0){
+    const fa = Math.min(.8, Z.flash * 2.6), fy = Z.ph === 'wave' ? gy - 40 : gy - 80, fg = cx.createRadialGradient(mx, fy, 0, mx, fy, 280);
+    fg.addColorStop(0, 'rgba(255,255,255,' + fa.toFixed(2) + ')'); fg.addColorStop(1, 'rgba(170,230,255,0)');
+    cx.fillStyle = fg; cx.beginPath(); cx.arc(mx, fy, 280, 0, 6.283); cx.fill();
   }
 
   cx.restore();
